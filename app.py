@@ -136,7 +136,7 @@ def detect_customer_intent(message):
         "custom_table": ["custom table", "build me a table", "commission", "dining table"],
     }
     project_type = next((name for name, needles in project_types.items() if any(n in msg for n in needles)), "")
-    product_words = ["epoxy", "resin", "pigment", "mica", "powder", "mold", "sanding", "polishing", "wood", "river table", "tabletop", "deep pour", "floor", "recommend", "best", "how much", "calculator", "need", "kit", "supplies", "tools"]
+    product_words = ["pigment", "mica", "powder", "mold", "sanding", "polishing", "wood", "river table", "tabletop", "deep pour", "floor", "recommend", "best", "how much", "calculator", "need", "kit", "supplies", "tools"]
     damage_words = ["damaged", "broken", "leaking", "missing", "wrong item", "not received", "never arrived"]
     quote_words = ["bulk", "commercial", "wholesale", "contractor", "quote", "large order"]
     return {
