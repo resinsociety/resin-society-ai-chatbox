@@ -191,12 +191,138 @@ def extract_frontend_context(data):
 def product_line(product):
     return " - ".join(x for x in [product.get("title") or "This product", clean_price(product.get("price")), clean_text(product.get("short_description") or product.get("description"), 130), product.get("url") or ""] if x)
 
-def resin_amount_answer(message):
+def is_resin_amount_question(message):
     msg = (message or "").lower()
-    if not (("how much" in msg or "calculator" in msg or "need" in msg) and any(x in msg for x in ["resin", "epoxy", "pour", "river table", "tabletop"])):
-        return None
-    return "For resin quantity, I need length, width, and pour depth. For rectangular pours, use length x width x depth, then convert cubic inches to gallons by dividing by 231. For river tables or voids, send the average channel width, length, and depth and I can help estimate with a safety margin."
+    amount_words = ["how much", "calculator", "calculate", "estimate", "need", "gallons", "ounces", "volume"]
+    resin_words = ["resin", "epoxy", "pour", "river table", "flood coat", "tabletop", "mold", "casting", "slab"]
+    return any(x in msg for x in amount_words) and any(x in msg for x in resin_words)
 
+
+def detect_resin_project_type(message):
+    msg = (message or "").lower()
+    if any(x in msg for x in ["flood coat", "top coat", "seal coat", "tabletop coating", "table top coating", "bar top", "countertop", "coat my", "coating"]):
+        return "flood_coat"
+    if any(x in msg for x in ["river table", "resin river", "live edge", "river", "channel", "gap", "void"]):
+        return "river_table"
+    if any(x in msg for x in ["mold", "mould", "casting", "cast", "coaster", "tray", "sphere", "dice", "blank"]):
+        return "mold_casting"
+    if any(x in msg for x in ["solid slab", "full slab", "all resin", "solid resin", "no wood", "entire slab", "whole slab"]):
+        return "solid_slab"
+    return "other"
+
+
+def _unit_to_inches(value, unit, default_unit="in"):
+    unit = (unit or default_unit or "in").lower()
+    if unit in ["ft", "feet", "foot"]:
+        return value * 12
+    return value
+
+
+def parse_resin_dimensions(message):
+    text = (message or "").lower()
+    pattern = r"(\d+(?:\.\d+)?)\s*(ft|feet|foot|in|inch|inches)?\s*(?:x|by)\s*(\d+(?:\.\d+)?)\s*(ft|feet|foot|in|inch|inches)?(?:\s*(?:x|by)\s*(\d+(?:\.\d+)?)\s*(ft|feet|foot|in|inch|inches)?)?"
+    match = re.search(pattern, text)
+    if not match:
+        return None
+    a, au, b, bu, c, cu = match.groups()
+    nums = [float(a), float(b)] + ([float(c)] if c else [])
+    has_units = bool(au or bu or cu)
+    table_context = any(x in text for x in ["table", "counter", "bar", "desktop", "slab"])
+    resin_space_context = any(x in text for x in ["gap", "void", "channel", "river gap", "river space", "empty space"])
+    default_plan_unit = "in" if resin_space_context else "ft" if table_context and not has_units else "in"
+    length_in = _unit_to_inches(float(a), au, default_plan_unit)
+    width_in = _unit_to_inches(float(b), bu, default_plan_unit)
+    depth_in = _unit_to_inches(float(c), cu, "in") if c else None
+    return {"length_in": length_in, "width_in": width_in, "depth_in": depth_in, "numbers": nums, "has_units": has_units, "raw": match.group(0).strip(), "assumed_plan_feet": table_context and not (au or bu)}
+
+
+def gallons_for_rect(length_in, width_in, depth_in):
+    return (length_in * width_in * depth_in) / 231
+
+
+def format_gallons(value):
+    if value < 1:
+        return f"{value:.2f} gal"
+    if value < 10:
+        return f"{value:.1f} gal"
+    return f"{value:.0f} gal"
+
+
+def resin_example_lines(length_in=None):
+    table_len = length_in or 96
+    flood_18 = gallons_for_rect(96, 48, 0.125)
+    flood_14 = gallons_for_rect(96, 48, 0.25)
+    river_6 = gallons_for_rect(table_len, 6, 2)
+    river_12 = gallons_for_rect(table_len, 12, 2)
+    return [
+        f"1/8 inch flood coat on an 8 ft x 4 ft top: about {format_gallons(flood_18)}.",
+        f"1/4 inch flood coat on an 8 ft x 4 ft top: about {format_gallons(flood_14)}.",
+        f"6 inch average river x 2 inch deep over 8 ft: about {format_gallons(river_6)}.",
+        f"12 inch average river x 2 inch deep over 8 ft: about {format_gallons(river_12)}.",
+    ]
+
+
+def resin_amount_answer(message):
+    if not is_resin_amount_question(message):
+        return None
+    msg = (message or "").lower()
+    project_type = detect_resin_project_type(message)
+    dims = parse_resin_dimensions(message)
+
+    if dims and dims.get("depth_in"):
+        full_volume = gallons_for_rect(dims["length_in"], dims["width_in"], dims["depth_in"])
+        only_rect_dims = project_type == "other" and not any(x in msg for x in ["river", "gap", "void", "channel", "flood", "coat", "mold", "casting"])
+        if full_volume > 10 and only_rect_dims:
+            examples = "\n".join(f"- {line}" for line in resin_example_lines(dims["length_in"]))
+            return (
+                "Before I calculate that as a solid block, what type of pour are you doing: flood coat/tabletop coating, river table, mold casting, full solid resin slab, or something else?\n\n"
+                f"I do not want to assume the whole {dims['raw']} area is resin. A full 8 ft x 4 ft x 2 inch solid resin slab is about 40 gallons, and that is uncommon. Most tables use much less because the wood takes up most of the volume.\n\n"
+                "For a realistic estimate, measure the empty space where wood is not: average river/gap width, length, and pour depth. If you are coating the top, use the coating thickness instead.\n\n"
+                "Quick examples:\n" + examples
+            )
+
+    if project_type == "other":
+        examples = "\n".join(f"- {line}" for line in resin_example_lines(dims["length_in"] if dims else None))
+        if dims and not dims.get("depth_in"):
+            size_note = f" For an {dims['raw']} table, the answer can swing a lot because that footprint is not usually all resin."
+        else:
+            size_note = ""
+        return (
+            "Are you building a river table, applying a flood coat/tabletop coating, pouring into a mold, or making a full solid resin slab?"
+            + size_note +
+            " The amount can vary from a few gallons for a coating to nearly 40 gallons for a full 8 ft x 4 ft x 2 inch solid slab.\n\n"
+            "For the most accurate estimate, measure only the resin space: average gap/river width, length, and depth, plus any resin coat over the wood.\n\n"
+            "Quick examples:\n" + examples
+        )
+
+    if project_type == "flood_coat":
+        if not dims:
+            return "For a flood coat/tabletop coating, send the top length and width plus the coating thickness, usually 1/8 inch or 1/4 inch. You are coating the surface, not filling the whole tabletop thickness."
+        depth = dims.get("depth_in") or (0.25 if "1/4" in msg or ".25" in msg else 0.125)
+        gallons = gallons_for_rect(dims["length_in"], dims["width_in"], depth)
+        assumed = "I used 1/8 inch as the coating thickness. " if not dims.get("depth_in") else ""
+        return f"For a flood coat/tabletop coating, {assumed}{dims['raw']} at {depth:g} inch thick is about {format_gallons(gallons)}. Add a little extra for edge drips, seal coats, and waste. If you meant a river/void instead, measure only the open gap where wood is not."
+
+    if project_type == "river_table":
+        if not dims or not dims.get("depth_in"):
+            examples = "\n".join(f"- {line}" for line in resin_example_lines(dims["length_in"] if dims else None))
+            return "For a river table, do not use the full tabletop width unless the whole center is resin. Measure the average river/gap width, river length, and pour depth.\n\nQuick examples:\n" + examples
+        gallons = gallons_for_rect(dims["length_in"], dims["width_in"], dims["depth_in"])
+        return f"If {dims['raw']} is the actual open river/gap, the estimate is about {format_gallons(gallons)} before waste. Add roughly 10-15% for uneven live edges, leaks, and mixing loss. If those dimensions are the whole tabletop, send the average empty river width instead."
+
+    if project_type == "mold_casting":
+        if not dims or not dims.get("depth_in"):
+            return "For a mold casting, send the inside length, inside width, and pour depth of the mold. If the shape is irregular, estimate the average filled area or send the mold capacity if you know it."
+        gallons = gallons_for_rect(dims["length_in"], dims["width_in"], dims["depth_in"])
+        return f"For a mold casting with inside dimensions of {dims['raw']}, the estimate is about {format_gallons(gallons)}. Use the inside mold space only, then add a small buffer for drips and leftover in the mixing cup."
+
+    if project_type == "solid_slab":
+        if not dims or not dims.get("depth_in"):
+            return "For a full solid resin slab, send length, width, and slab thickness. Just a heads up: full solid slabs use a lot of resin; an 8 ft x 4 ft x 2 inch slab is about 40 gallons."
+        gallons = gallons_for_rect(dims["length_in"], dims["width_in"], dims["depth_in"])
+        return f"A full solid resin slab at {dims['raw']} is about {format_gallons(gallons)}. That is only right if the entire shape is resin with no wood or filler taking up space. For most tables, measure the empty river/void area instead."
+
+    return None
 def maybe_create_support_case(conversation_id, issue_type, message, intent_data, page_context, priority="normal"):
     if SAFE_TEST_MODE or not ENABLE_CHATWOOT_SEND:
         return {"dry_run": True, "reason": "RESIN_SAFE_TEST_MODE or RESIN_ENABLE_CHATWOOT_SEND disabled", "conversation_id": conversation_id, "issue_type": issue_type, "priority": priority}
@@ -205,8 +331,8 @@ def maybe_create_support_case(conversation_id, issue_type, message, intent_data,
 def try_fast_deterministic_answer(message, page_context, conversation_id, learning_tracker, timing_metrics):
     intent = detect_customer_intent(message)
     amount = resin_amount_answer(message)
-    if amount and not intent.get("project_size"):
-        record_timing(timing_metrics, "resin_amount_intake", 0, "retrieval")
+    if amount:
+        record_timing(timing_metrics, "resin_amount", 0, "retrieval")
         return amount
     if intent.get("damage_issue"):
         learning_tracker["support_case"] = maybe_create_support_case(conversation_id, "damaged_or_missing_order", message, intent, page_context, "high")
@@ -327,7 +453,7 @@ def build_answer(message, conversation_id, page_context, memory_text, timing_met
     if not answer:
         tool_executor = make_tool_executor(conversation_id, message, page_context, learning_tracker)
         answer = timed_call(timing_metrics, "run_resin_agent", "ai_model", lambda: run_resin_agent(message, memory_text, page_context, tool_executor))
-    if lead and not lead.get("email"):
+    if lead and not lead.get("email") and not is_resin_amount_question(message):
         answer += "\n\nFor a project quote, send your name, email, project size, timeline, and rough budget range."
     schedule_logging(conversation_id, message, answer, intent_data, page_context, learning_tracker, lead)
     return answer, intent_data, learning_tracker, lead

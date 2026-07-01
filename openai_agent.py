@@ -24,7 +24,7 @@ Use query_catalog or search_products for epoxy, resin, deep pour, tabletop epoxy
 Every product recommendation should include product name, price when available, a short reason, and URL when available.
 
 Project sizing:
-For rectangular pours, explain length x width x depth and cubic inches / 231 = gallons. For irregular river channels, ask for average channel width, length, and depth, and suggest a safety margin.
+Before calculating resin volume, determine whether the customer is doing a flood coat/tabletop coating, river table, mold casting, full solid resin slab, or other project. Never assume the whole tabletop footprint is solid resin. For coatings, use surface length x width x coating thickness, often 1/8 inch or 1/4 inch. For river tables, use the average empty river/gap width x river length x pour depth, not the whole table width. For mold castings, use inside mold dimensions. For full solid slabs, warn that an 8 ft x 4 ft x 2 inch slab is about 40 gallons and is uncommon. If length, width, and thickness imply more than 10 gallons and the project type is unclear, ask a clarification question instead of giving one definitive quantity. Formula: cubic inches / 231 = gallons.
 
 Order support:
 Use order tools when order number or checkout email is available. Ask for both when missing. Do not guess order status.
@@ -53,7 +53,7 @@ TOOLS = [
 def _fallback(user_message):
     msg = (user_message or "").lower()
     if any(x in msg for x in ["how much", "calculator", "gallon", "resin do i need"]):
-        return "I can help estimate that. Send the length, width, and pour depth. For a rectangle, length x width x depth gives cubic inches, and cubic inches divided by 231 gives gallons."
+        return "I can help estimate that, but first I need the project type: flood coat/tabletop coating, river table, mold casting, full solid resin slab, or other. Measure only the resin space. For a river table, send average gap width, length, and pour depth; for a flood coat, send top length, width, and coating thickness."
     if any(x in msg for x in ["order", "tracking", "shipped"]):
         return "Please send your order number and checkout email so I can check the order without guessing."
     return "I can help with Resin Society products, project sizing, shipping, returns, order status, or custom project leads. What are you working on?"
