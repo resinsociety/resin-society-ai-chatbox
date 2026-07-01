@@ -1,4 +1,4 @@
-﻿import time, json, re, threading
+import time, json, re, threading
 from shopify_tools import shopify_graphql
 
 SITE_URL = "https://resinsociety.net"
@@ -6,6 +6,7 @@ CATALOG_CACHE = {"loaded_at": 0, "products": []}
 CACHE_TTL_SECONDS = 900
 QUERY_RESULT_CACHE = {}
 QUERY_RESULT_CACHE_TTL_SECONDS = 300
+CATALOG_LOCK = threading.Lock()
 PRELOAD_QUERIES = ["epoxy resin", "deep pour epoxy", "tabletop epoxy", "river table resin", "resin pigments", "mica powder", "resin molds", "sanding polishing", "floor epoxy", "woodworking tools"]
 QUERY_STOPWORDS = {"about", "also", "and", "any", "are", "available", "best", "can", "could", "for", "from", "good", "have", "in", "is", "need", "now", "product", "products", "that", "the", "this", "what", "with", "you", "your", "resin", "society"}
 NEED_CATEGORY_RULES = {
@@ -66,7 +67,7 @@ def product_text(product):
 
 def format_product_for_agent(product):
     return {
-        "id": product.get("id"), "title": product.get("title"), "handle": product.get("handle"), "vendor": product.get("vendor"), "product_type": product.get("product_type"), "tags": product.get("tags", []), "status": product.get("status"), "url": product.get("url") or (f"{SITE_URL}/products/{product.get('handle')}" if product.get("handle") else ""), "description": product.get("description"), "short_description": product.get("description"), "price": safe_float(product.get("price")), "currency": product.get("currency") or "USD", "image": product.get("image"), "variants": product.get("variants", []), "metafields": product.get("metafields", []),
+        "id": product.get("id"), "title": product.get("title"), "handle": product.get("handle"), "vendor": product.get("vendor"), "product_type": product.get("product_type"), "tags": product.get("tags", []), "status": product.get("status"), "url": product.get("url") or (f"{SITE_URL}/products/{product.get('handle')}" if product.get("handle") else ""), "description": product.get("description"), "short_description": product.get("description"), "price": safe_float(product.get("price")), "currency": product.get("currency") or "USD", "image": product.get("image"),
     }
 
 
@@ -74,7 +75,7 @@ def fetch_catalog_from_shopify(limit=250):
     query = """
     query Products($first: Int!) {
       products(first: $first, query: "status:active") {
-        edges { node { id title handle vendor productType tags status onlineStoreUrl descriptionPlainSummary: description(truncateAt: 800) seo { title description } priceRangeV2 { minVariantPrice { amount currencyCode } } featuredImage { url } variants(first: 50) { edges { node { title availableForSale price inventoryQuantity } } } metafields(first: 50) { edges { node { namespace key type value } } } } }
+        edges { node { id title handle vendor productType tags status onlineStoreUrl descriptionPlainSummary: description(truncateAt: 800) seo { title description } priceRangeV2 { minVariantPrice { amount currencyCode } } featuredImage { url } } }
       }
     }
     """
@@ -92,10 +93,14 @@ def get_catalog_snapshot(force_refresh=False):
     age = time.time() - CATALOG_CACHE["loaded_at"] if CATALOG_CACHE["loaded_at"] else 999999
     if not force_refresh and CATALOG_CACHE["products"] and age < CACHE_TTL_SECONDS:
         return CATALOG_CACHE["products"]
-    products = fetch_catalog_from_shopify()
-    CATALOG_CACHE["products"] = products
-    CATALOG_CACHE["loaded_at"] = time.time()
-    return products
+    with CATALOG_LOCK:
+        age = time.time() - CATALOG_CACHE["loaded_at"] if CATALOG_CACHE["loaded_at"] else 999999
+        if not force_refresh and CATALOG_CACHE["products"] and age < CACHE_TTL_SECONDS:
+            return CATALOG_CACHE["products"]
+        products = fetch_catalog_from_shopify()
+        CATALOG_CACHE["products"] = products
+        CATALOG_CACHE["loaded_at"] = time.time()
+        return products
 
 
 def get_catalog_cache_status():
@@ -168,16 +173,14 @@ def get_complementary_products(product_handle=None, user_query="", page_context=
 
 
 def preload_store_cache(force_refresh=False):
-    def _preload():
-        try:
-            products = get_catalog_snapshot(force_refresh=force_refresh)
-            for q in PRELOAD_QUERIES:
-                try:
-                    query_catalog(q, {}, 6)
-                except Exception as e:
-                    print("Catalog query preload failed:", q, e)
-            print("Resin store cache preloaded:", len(products), "products")
-        except Exception as e:
-            print("Resin store cache preload failed:", e)
-    threading.Thread(target=_preload, daemon=True).start()
-    return {"started": True, "status": get_catalog_cache_status()}
+    try:
+        products = get_catalog_snapshot(force_refresh=force_refresh)
+        for q in PRELOAD_QUERIES:
+            try:
+                query_catalog(q, {}, 6)
+            except Exception as e:
+                print("Catalog query preload failed:", q, e)
+        print("Resin store cache preloaded:", len(products), "products")
+    except Exception as e:
+        print("Resin store cache preload failed:", e)
+    return {"started": False, "status": get_catalog_cache_status()}
