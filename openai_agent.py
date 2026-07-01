@@ -1,11 +1,11 @@
-﻿import os, json
+import os, json
 from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 MODEL = os.getenv("OPENAI_AGENT_MODEL", "gpt-4.1-mini")
 MAX_TOOL_ROUNDS = 6
+_client = None
 
 SYSTEM_PROMPT = """
 You are Resin Society Concierge, the AI shopping, project, order, and support assistant for Resin Society.
@@ -59,8 +59,19 @@ def _fallback(user_message):
     return "I can help with Resin Society products, project sizing, shipping, returns, order status, or custom project leads. What are you working on?"
 
 
+def get_openai_client():
+    global _client
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return None
+    if _client is None:
+        _client = OpenAI(api_key=api_key)
+    return _client
+
+
 def run_resin_agent(user_message, memory_text="", page_context=None, tool_executor=None):
-    if not os.getenv("OPENAI_API_KEY"):
+    client = get_openai_client()
+    if not client:
         return _fallback(user_message)
 
     page_context = page_context or {}
@@ -70,7 +81,11 @@ def run_resin_agent(user_message, memory_text="", page_context=None, tool_execut
     ]
 
     for _ in range(MAX_TOOL_ROUNDS):
-        response = client.chat.completions.create(model=MODEL, temperature=0.2, messages=messages, tools=TOOLS, tool_choice="auto")
+        try:
+            response = client.chat.completions.create(model=MODEL, temperature=0.2, messages=messages, tools=TOOLS, tool_choice="auto")
+        except Exception as e:
+            print("OpenAI agent failed:", type(e).__name__, str(e)[:500])
+            return _fallback(user_message)
         message = response.choices[0].message
         messages.append(message)
         if not message.tool_calls:
