@@ -1,4 +1,4 @@
-﻿from dotenv import load_dotenv
+from dotenv import load_dotenv
 from pathlib import Path
 from datetime import datetime, UTC
 import os, requests
@@ -37,15 +37,21 @@ backup_path.write_text(content, encoding='utf-8')
 snippet = (ROOT / 'shopify-resin-chatwoot-widget.liquid').read_text(encoding='utf-8').strip()
 marker = 'Resin Society Chatwoot Website Chat'
 if marker in content:
-    print('Widget already present; no Shopify update needed.')
-    print('backup', backup_path)
-    raise SystemExit(0)
-if '</body>' not in content:
+    start = content.index('<!-- Resin Society Chatwoot Website Chat -->')
+    end = content.index('</script>', start) + len('</script>')
+    existing = content[start:end].strip()
+    if existing == snippet:
+        print('Widget already present; no Shopify update needed.')
+        print('backup', backup_path)
+        raise SystemExit(0)
+    updated = content[:start] + snippet + content[end:]
+    print('Widget already present; updating existing block.')
+elif '</body>' in content:
+    updated = content.replace('</body>', snippet + '\n</body>', 1)
+else:
     raise RuntimeError('Could not find </body> in layout/theme.liquid')
-updated = content.replace('</body>', snippet + '\n</body>', 1)
 put = requests.put(BASE, headers=HEADERS, json={'asset': {'key': 'layout/theme.liquid', 'value': updated}}, timeout=30)
 print('PUT theme.liquid', put.status_code)
 put.raise_for_status()
 print('backup', backup_path)
 print('installed', marker in updated)
-

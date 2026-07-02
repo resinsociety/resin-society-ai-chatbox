@@ -118,6 +118,16 @@ def extract_order_number(text):
     m = re.search(r"(?:order\s*)?#?\s*(\d{4,})", text or "", re.I)
     return m.group(1) if m else ""
 
+
+def is_simple_greeting(text):
+    msg = re.sub(r"[^a-z\s]", "", (text or "").lower()).strip()
+    return msg in ["hi", "hello", "hey", "hiya", "good morning", "good afternoon", "good evening"]
+
+
+def storefront_greeting():
+    return "Hi, I'm Sol. I can help you shop Resin Society home decor and resin art, explore custom tables, choose supplies, plan a resin project, or check shipping, returns, and orders. What can I help you find today?"
+
+
 def extract_project_size(text):
     for pattern in [r"\b\d+(?:\.\d+)?\s*(?:x|by)\s*\d+(?:\.\d+)?\s*(?:x|by)?\s*\d*(?:\.\d+)?\s*(?:in|inch|inches|ft|feet|foot|sq ft|square feet)?", r"\b\d+(?:\.\d+)?\s*(?:sq ft|square feet|gallons?|oz|ounces?|liters?|quarts?)\b"]:
         m = re.search(pattern, text or "", re.I)
@@ -329,6 +339,9 @@ def maybe_create_support_case(conversation_id, issue_type, message, intent_data,
     return create_support_case(conversation_id=conversation_id, issue_type=issue_type, customer_message=message, order_number=intent_data.get("order_number"), customer_email=intent_data.get("email") or page_context.get("customer_email"), priority=priority, labels=["resin_society"], summary=message[:800], extra_attributes={"resin_page_url": page_context.get("url"), "resin_project_type": intent_data.get("project_type"), "resin_project_size": intent_data.get("project_size")})
 
 def try_fast_deterministic_answer(message, page_context, conversation_id, learning_tracker, timing_metrics):
+    if is_simple_greeting(message):
+        record_timing(timing_metrics, "storefront_greeting", 0, "retrieval")
+        return storefront_greeting()
     intent = detect_customer_intent(message)
     amount = resin_amount_answer(message)
     if amount:
@@ -534,4 +547,3 @@ async def chatwoot_webhook(request: Request):
 @app.get("/reports/summary")
 def reports_summary(days: int = 1):
     return build_summary_report(days=days)
-
