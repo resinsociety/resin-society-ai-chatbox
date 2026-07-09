@@ -1,4 +1,4 @@
-﻿# Resin Society AI Chatbox
+# Resin Society AI Chatbox
 
 Standalone Resin Society migration of the GREET AI chat architecture. This folder is intentionally independent from GREET: separate env, separate Chatwoot inbox/channel, separate Shopify token, separate database/table prefix, and separate deployment name.
 
@@ -32,6 +32,16 @@ Do not install on `resinsociety.net` until all are true:
 - Manual approval is given.
 - Only then set `RESIN_SAFE_TEST_MODE=false` and `RESIN_ENABLE_CHATWOOT_SEND=true` in production.
 
+## Auto Close
+
+Eligible AI-handled Chatwoot conversations are auto-resolved after RESIN_AUTO_CLOSE_DELAY_SECONDS if the customer does not reply again. Escalations, damaged orders, returns/refunds, bulk/commercial leads, custom table leads, flooring contractor leads, and uncertain/safety-sensitive questions stay open for human review.
+
+Defaults:
+
+```text
+RESIN_AUTO_CLOSE_ENABLED=true
+RESIN_AUTO_CLOSE_DELAY_SECONDS=900
+```
 ## Deployment
 
 Suggested deployment name: `resin-society-ai-chatbox`.

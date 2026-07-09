@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import os, re, time, requests
+import os, re, time, threading, requests
 
 # The desktop environment can inject a dead local proxy. The chat service must call
 # Chatwoot, Shopify, and OpenAI directly so customer replies do not get stuck.
@@ -19,7 +19,7 @@ from blog_tools import search_articles
 from memory_tools import add_message, build_memory_text
 from openai_agent import run_resin_agent
 from policy_tools import get_policy_info
-from chatwoot_tools import create_support_case, maybe_auto_resolve_conversation
+from chatwoot_tools import create_support_case, should_auto_resolve, close_conversation_if_no_new_customer_reply
 from learning_tools import log_conversation_turn, log_lead, build_summary_report
 
 load_dotenv()
@@ -34,6 +34,8 @@ RESIN_CHATWOOT_INBOX_ID = os.getenv("RESIN_CHATWOOT_INBOX_ID")
 SAFE_TEST_MODE = os.getenv("RESIN_SAFE_TEST_MODE", "true").lower() != "false"
 ENABLE_CHATWOOT_SEND = os.getenv("RESIN_ENABLE_CHATWOOT_SEND", "false").lower() == "true"
 TARGET_RESPONSE_SECONDS = float(os.getenv("RESIN_TARGET_RESPONSE_SECONDS", "5"))
+AUTO_CLOSE_ENABLED = os.getenv("RESIN_AUTO_CLOSE_ENABLED", "true").lower() != "false"
+AUTO_CLOSE_DELAY_SECONDS = int(os.getenv("RESIN_AUTO_CLOSE_DELAY_SECONDS", "900"))
 WAITING_MESSAGE = "I'm checking that for you now so I don't give you the wrong answer. This may take 1-3 minutes."
 TEAM_FOLLOWUP_MESSAGE = "I want to make sure I give you the right answer. I'm going to have the Resin Society team review this and follow up."
 BACKGROUND_EXECUTOR = ThreadPoolExecutor(max_workers=int(os.getenv("RESIN_CHAT_WORKERS", "4")))
@@ -455,6 +457,31 @@ def schedule_logging(conversation_id, message, answer, intent_data, page_context
             print("Resin logging failed:", e)
     BACKGROUND_EXECUTOR.submit(run)
 
+
+def schedule_chatwoot_auto_close(conversation_id, source_message_id, intent_data, answer):
+    if not AUTO_CLOSE_ENABLED or SAFE_TEST_MODE or not ENABLE_CHATWOOT_SEND:
+        return {"scheduled": False, "reason": "Auto-close disabled or Chatwoot send inactive."}
+    if source_message_id is None:
+        return {"scheduled": False, "reason": "Missing source message id."}
+    if not should_auto_resolve(intent_data, answer):
+        return {"scheduled": False, "reason": "Conversation needs human review or is not eligible."}
+
+    def run():
+        try:
+            result = close_conversation_if_no_new_customer_reply(
+                conversation_id,
+                source_message_id=source_message_id,
+                reason=f"Auto-closed after {AUTO_CLOSE_DELAY_SECONDS} seconds with no customer reply.",
+            )
+            print("Resin auto-close result:", result)
+        except Exception as e:
+            print("Resin auto-close failed:", e)
+
+    timer = threading.Timer(max(0, AUTO_CLOSE_DELAY_SECONDS), run)
+    timer.daemon = True
+    timer.start()
+    return {"scheduled": True, "delay_seconds": AUTO_CLOSE_DELAY_SECONDS}
+
 def build_answer(message, conversation_id, page_context, memory_text, timing_metrics):
     intent_data = detect_customer_intent(message)
     learning_tracker = {"tools_called": [], "products": [], "knowledge_results": [], "support_case": None}
@@ -473,7 +500,7 @@ def build_answer(message, conversation_id, page_context, memory_text, timing_met
 
 @app.get("/")
 def home():
-    return {"status": "Resin Society AI chat running", "safe_test_mode": SAFE_TEST_MODE, "chatwoot_send_enabled": ENABLE_CHATWOOT_SEND, "site_url": SITE_URL}
+    return {"status": "Resin Society AI chat running", "safe_test_mode": SAFE_TEST_MODE, "chatwoot_send_enabled": ENABLE_CHATWOOT_SEND, "site_url": SITE_URL, "auto_close_enabled": AUTO_CLOSE_ENABLED, "auto_close_delay_seconds": AUTO_CLOSE_DELAY_SECONDS}
 
 @app.post("/ai/ask")
 async def ai_ask(request: Request):
@@ -532,10 +559,9 @@ async def chatwoot_webhook(request: Request):
         send_chatwoot_reply(conversation_id, answer)
         add_message(conversation_id, "user", message)
         add_message(conversation_id, "assistant", answer)
-        if not SAFE_TEST_MODE and ENABLE_CHATWOOT_SEND:
-            maybe_auto_resolve_conversation(conversation_id, intent_data, answer)
+        auto_close = schedule_chatwoot_auto_close(conversation_id, data.get("id"), intent_data, answer)
         log_chat_timing(conversation_id, "/chatwoot/webhook", timing_metrics)
-        return {"status": "replied", "stage": "final", "safe_test_mode": SAFE_TEST_MODE}
+        return {"status": "replied", "stage": "final", "safe_test_mode": SAFE_TEST_MODE, "auto_close": auto_close}
     except TimeoutError:
         timing_metrics["timed_out"] = True
         timing_metrics["stage"] = "waiting"

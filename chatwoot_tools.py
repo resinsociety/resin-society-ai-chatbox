@@ -133,6 +133,47 @@ def add_resolution_note(conversation_id, reason="Auto-resolved by Resin Society 
     return add_private_note(conversation_id, f"Resin Society AI Auto-Resolved\n\nReason: {reason}")
 
 
+def get_conversation_messages(conversation_id):
+    response = direct_request("GET", chatwoot_url(f"/conversations/{conversation_id}/messages"), headers=chatwoot_headers(), timeout=30)
+    response.raise_for_status()
+    data = response.json()
+    if isinstance(data, dict):
+        return data.get("payload") or data.get("messages") or []
+    return data if isinstance(data, list) else []
+
+
+def is_incoming_customer_message(message):
+    message_type = message.get("message_type")
+    return message.get("private") is not True and message_type in ["incoming", 0]
+
+
+def has_new_customer_reply(conversation_id, source_message_id=None):
+    if source_message_id is None:
+        return False
+    try:
+        source_message_id = int(source_message_id)
+    except Exception:
+        return False
+    for message in get_conversation_messages(conversation_id):
+        try:
+            message_id = int(message.get("id"))
+        except Exception:
+            continue
+        if message_id > source_message_id and is_incoming_customer_message(message):
+            return True
+    return False
+
+
+def close_conversation_if_no_new_customer_reply(conversation_id, source_message_id=None, reason="No customer reply after Resin Society AI answer"):
+    if SAFE_TEST_MODE or not ENABLE_CHATWOOT_SEND:
+        return {"dry_run": True, "conversation_id": conversation_id, "reason": reason}
+    if has_new_customer_reply(conversation_id, source_message_id):
+        return {"resolved": False, "reason": "Customer replied again before auto-close."}
+    note = add_resolution_note(conversation_id, reason)
+    result = resolve_conversation(conversation_id)
+    return {"resolved": True, "note": note, "result": result, "reason": reason}
+
+
 def should_auto_resolve(intent_data=None, reply_text=""):
     intent_data = intent_data or {}
     if intent_data.get("requested_human") or intent_data.get("damage_issue") or intent_data.get("return_question"):
@@ -141,7 +182,7 @@ def should_auto_resolve(intent_data=None, reply_text=""):
         return False
     if "team" in (reply_text or "").lower() and "follow" in (reply_text or "").lower():
         return False
-    return intent_data.get("question_type") in ["product_recommendation", "shipping_question", "general_question"]
+    return intent_data.get("question_type") in ["product_recommendation", "shipping_question", "general_question", "order_question"]
 
 
 def maybe_auto_resolve_conversation(conversation_id, intent_data=None, reply_text=""):
