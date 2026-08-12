@@ -127,7 +127,7 @@ def is_simple_greeting(text):
 
 
 def storefront_greeting():
-    return "Hi, welcome in. I can help you shop Resin Society home decor and resin art, explore custom tables, choose supplies, plan a project, or check shipping, returns, and orders. What can I help you find today?"
+    return "Hi, welcome in. Ask us anything :) I can help with home decor, resin art, custom tables, supplies, orders, shipping, or returns."
 
 
 def extract_project_size(text):

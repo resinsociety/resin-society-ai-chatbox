@@ -57,7 +57,7 @@ def _fallback(user_message):
         return "I can help estimate that, but first I need the project type: flood coat/tabletop coating, river table, mold casting, full solid resin slab, or other. Measure only the resin space. For a river table, send average gap width, length, and pour depth; for a flood coat, send top length, width, and coating thickness."
     if any(x in msg for x in ["order", "tracking", "shipped"]):
         return "Please send your order number and checkout email so I can check the order without guessing."
-    return "Hi, welcome in. I can help you shop Resin Society home decor and resin art, explore custom tables, choose supplies, plan a project, or check shipping, returns, and orders. What can I help you find today?"
+    return "Hi, welcome in. Ask us anything :) I can help with home decor, resin art, custom tables, supplies, orders, shipping, or returns."
 
 
 def get_openai_client():
