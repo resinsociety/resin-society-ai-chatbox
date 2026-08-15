@@ -48,7 +48,8 @@
         "  .woot-widget-bubble { min-width: 72px !important; height: 42px !important; padding: 0 16px !important; }",
         "  body.resin-mobile-overlay-open .woot-widget-bubble,",
         "  body.resin-mobile-overlay-open .woot-widget-holder,",
-        "  body.resin-mobile-overlay-open iframe[src*='chatwoot'] { display: none !important; }",
+        "  body.resin-mobile-overlay-open iframe[src*='chatwoot'],",
+        "  body.resin-mobile-overlay-open .resin-hidden-under-overlay { display: none !important; visibility: hidden !important; pointer-events: none !important; }",
         "}"
       ].join("\n");
       document.head.appendChild(style);
@@ -159,17 +160,19 @@
         var rect = node.getBoundingClientRect();
         var style = window.getComputedStyle(node);
         if (style.position !== "fixed" && style.position !== "sticky") return;
-        if (rect.width < window.innerWidth * 0.72 || rect.height < 48 || rect.height > 190) return;
-        if (rect.bottom < window.innerHeight - 170 || rect.top > window.innerHeight - 35) return;
+        if (rect.width < window.innerWidth * 0.56 || rect.height < 38 || rect.height > 230) return;
+        if (rect.bottom < window.innerHeight - 230 || rect.top > window.innerHeight - 24) return;
         if (node.closest(".resin-mobile-atc, .woot-widget-bubble, .woot-widget-holder")) return;
         var classText = String(node.className || "").toLowerCase();
         var idText = String(node.id || "").toLowerCase();
         var text = "";
         try { text = String(node.innerText || node.textContent || "").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 260); } catch (e) {}
-        var hasProductAction = !!node.querySelector('form[action*="/cart/add"], button[name="add"], button[data-add-to-cart], .product-form__submit, [class*="product-form"], [class*="add-to-cart"], [class*="cart"]');
+        var hasProductAction = !!node.querySelector('form[action*="/cart/add"], button[name="add"], button[data-add-to-cart], button[type="submit"], a[href*="/cart"], .product-form__submit, [class*="product-form"], [class*="add-to-cart"], [class*="cart"], [class*="bag"]');
+        var hasPrice = /\$\s*\d|\d[\d,.]*\s*usd/.test(text);
+        var hasCartIcon = !!node.querySelector('svg, [class*="icon-cart"], [class*="icon-bag"], [class*="cart-icon"], [class*="bag-icon"]');
         var looksLikeProductBar = /product|variant|sticky|cart|add/.test(classText + " " + idText) || /\$|add|cart|bag|checkout/.test(text);
         var looksLikeRewardOrChat = /reward|loyalty|smile|points|chat|woot/.test(classText + " " + idText + " " + text);
-        if (hasProductAction && looksLikeProductBar && !looksLikeRewardOrChat) hideNode(node);
+        if (((hasProductAction && looksLikeProductBar) || (hasPrice && hasCartIcon)) && !looksLikeRewardOrChat) hideNode(node);
       });
     }
 
@@ -343,6 +346,7 @@
   window.ResinMobileOverlayLayer = (function() {
     var mediaQuery = window.matchMedia ? window.matchMedia("(max-width: 767px)") : null;
     var scheduled = false;
+    var hiddenNodes = [];
 
     function isMobile() {
       return mediaQuery ? mediaQuery.matches : window.innerWidth <= 767;
@@ -379,10 +383,68 @@
         /society points|daily visit reward|my coupons|refer a friend|recently viewed|order note|discount|subtotal|view cart|checkout|cart\s*\d*/.test(text);
     }
 
+    function isSmallBottomFloating(node) {
+      if (!isVisible(node)) return false;
+      var rect = node.getBoundingClientRect();
+      var style = window.getComputedStyle(node);
+      if (style.position !== "fixed" && style.position !== "sticky") return false;
+      if (rect.bottom < window.innerHeight - 210 || rect.top > window.innerHeight - 12) return false;
+      if (rect.width > window.innerWidth * 0.94 && rect.height > 210) return false;
+      if (rect.width < 38 || rect.height < 34 || rect.height > 210) return false;
+      if (node.closest("[role='dialog'], [aria-modal='true'], .drawer, .cart-drawer, .modal, .popup")) return false;
+      return true;
+    }
+
+    function setHiddenUnderOverlay(node, hidden) {
+      if (!node || node === document.body || node === document.documentElement) return;
+      if (hidden) {
+        if (node.dataset.resinOverlayHidden === "1") return;
+        node.dataset.resinOverlayHidden = "1";
+        node.dataset.resinOverlayDisplay = node.style.display || "";
+        node.dataset.resinOverlayVisibility = node.style.visibility || "";
+        node.dataset.resinOverlayPointerEvents = node.style.pointerEvents || "";
+        node.classList.add("resin-hidden-under-overlay");
+        node.style.setProperty("display", "none", "important");
+        node.style.setProperty("visibility", "hidden", "important");
+        node.style.setProperty("pointer-events", "none", "important");
+        hiddenNodes.push(node);
+      } else if (node.dataset.resinOverlayHidden === "1") {
+        node.classList.remove("resin-hidden-under-overlay");
+        node.style.display = node.dataset.resinOverlayDisplay || "";
+        node.style.visibility = node.dataset.resinOverlayVisibility || "";
+        node.style.pointerEvents = node.dataset.resinOverlayPointerEvents || "";
+        delete node.dataset.resinOverlayHidden;
+        delete node.dataset.resinOverlayDisplay;
+        delete node.dataset.resinOverlayVisibility;
+        delete node.dataset.resinOverlayPointerEvents;
+      }
+    }
+
+    function clearHiddenUnderOverlay() {
+      hiddenNodes = hiddenNodes.filter(function(node) {
+        if (node && node.isConnected && node.dataset.resinOverlayHidden === "1") setHiddenUnderOverlay(node, false);
+        return false;
+      });
+    }
+
+    function hideFloatingWidgetsUnderOverlay() {
+      var nodes = Array.prototype.slice.call(document.body.querySelectorAll("*"));
+      nodes.forEach(function(node) {
+        if (!isSmallBottomFloating(node)) return;
+        var classText = String(node.className || "").toLowerCase();
+        var idText = String(node.id || "").toLowerCase();
+        var text = "";
+        try { text = String(node.innerText || node.textContent || "").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 220); } catch (e) {}
+        var launcherish = /reward|loyalty|smile|points|chat|woot|launcher|bubble|sticky|cart|bag|add/.test(classText + " " + idText + " " + text);
+        if (launcherish || node.classList.contains("resin-mobile-atc")) setHiddenUnderOverlay(node, true);
+      });
+    }
+
     function update() {
       if (!document.body) return;
       if (!isMobile()) {
         document.body.classList.remove("resin-mobile-overlay-open");
+        clearHiddenUnderOverlay();
         return;
       }
       var nodes = Array.prototype.slice.call(document.querySelectorAll([
@@ -403,6 +465,8 @@
       ].join(",")));
       var open = nodes.some(looksLikeBlockingPanel);
       document.body.classList.toggle("resin-mobile-overlay-open", open);
+      if (open) hideFloatingWidgetsUnderOverlay();
+      else clearHiddenUnderOverlay();
     }
 
     function scheduleUpdate() {
