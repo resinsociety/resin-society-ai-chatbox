@@ -114,13 +114,46 @@
         ".resin-mobile-atc__label { white-space: nowrap; }",
         "@media (min-width: 768px) { .resin-mobile-atc { display: none !important; } }",
         "@media (max-width: 767px) {",
-        "  .product-sticky-form { display: none !important; }",
+        "  .product-sticky-form,",
+        "  [class*='product-sticky-form'],",
+        "  [class*='product_sticky_form'],",
+        "  [class*='sticky-product'],",
+        "  [class*='sticky_product'],",
+        "  [class*='sticky-atc'],",
+        "  [class*='sticky_atc'],",
+        "  [class*='sticky-add-to-cart'],",
+        "  [class*='sticky_add_to_cart'] {",
+        "    display: none !important;",
+        "    visibility: hidden !important;",
+        "    pointer-events: none !important;",
+        "  }",
         "  body.resin-mobile-overlay-open .resin-mobile-atc { display: none !important; }",
         "  .resin-mobile-atc__price { display: none; }",
         "  .resin-mobile-atc__icon { width: 16px; height: 16px; flex: 0 0 16px; }",
         "}"
       ].join("\n");
       document.head.appendChild(style);
+    }
+
+    function hideOldStickyBars() {
+      if (!isMobile() || !isProductPage()) return;
+      var selectors = [
+        ".product-sticky-form",
+        "[class*='product-sticky-form']",
+        "[class*='product_sticky_form']",
+        "[class*='sticky-product']",
+        "[class*='sticky_product']",
+        "[class*='sticky-atc']",
+        "[class*='sticky_atc']",
+        "[class*='sticky-add-to-cart']",
+        "[class*='sticky_add_to_cart']"
+      ];
+      Array.prototype.slice.call(document.querySelectorAll(selectors.join(","))).forEach(function(node) {
+        if (node.closest(".resin-mobile-atc")) return;
+        node.style.setProperty("display", "none", "important");
+        node.style.setProperty("visibility", "hidden", "important");
+        node.style.setProperty("pointer-events", "none", "important");
+      });
     }
 
     function productForm() {
@@ -223,6 +256,7 @@
 
     function update() {
       if (!button) return;
+      hideOldStickyBars();
       var form = productForm();
       var nativeButton = submitButton(form);
       var shouldShow = isMobile() && isProductPage() && form && nativeButton;
