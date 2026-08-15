@@ -111,7 +111,9 @@
         ".resin-mobile-atc__label { white-space: nowrap; }",
         "@media (min-width: 768px) { .resin-mobile-atc { display: none !important; } }",
         "@media (max-width: 767px) {",
+        "  .product-sticky-form { display: none !important; }",
         "  .resin-mobile-atc__price { display: none; }",
+        "  .resin-mobile-atc__icon { width: 16px; height: 16px; flex: 0 0 16px; }",
         "}"
       ].join("\n");
       document.head.appendChild(style);
@@ -206,7 +208,8 @@
       if (!button) return;
       var price = productPrice();
       var label = state === "added" ? "Added" : state === "adding" ? "Adding" : "Add";
-      var html = '<span class="resin-mobile-atc__label">' + label + '</span>' + (price ? '<span class="resin-mobile-atc__price">' + price + '</span>' : "");
+      var icon = '<svg class="resin-mobile-atc__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6.25 8.5h11.5l-.78 10.03A2.2 2.2 0 0 1 14.78 20.5H9.22a2.2 2.2 0 0 1-2.19-1.97L6.25 8.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 8.5V7a3 3 0 0 1 6 0v1.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+      var html = icon + '<span class="resin-mobile-atc__label">' + label + '</span>' + (price ? '<span class="resin-mobile-atc__price">' + price + '</span>' : "");
       if (html !== lastHtml) {
         button.innerHTML = html;
         lastHtml = html;
