@@ -46,6 +46,9 @@
         ".woot-widget-bubble.woot--close svg { display: block !important; }",
         "@media (max-width: 767px) {",
         "  .woot-widget-bubble { min-width: 72px !important; height: 42px !important; padding: 0 16px !important; }",
+        "  body.resin-mobile-overlay-open .woot-widget-bubble,",
+        "  body.resin-mobile-overlay-open .woot-widget-holder,",
+        "  body.resin-mobile-overlay-open iframe[src*='chatwoot'] { display: none !important; }",
         "}"
       ].join("\n");
       document.head.appendChild(style);
@@ -112,6 +115,7 @@
         "@media (min-width: 768px) { .resin-mobile-atc { display: none !important; } }",
         "@media (max-width: 767px) {",
         "  .product-sticky-form { display: none !important; }",
+        "  body.resin-mobile-overlay-open .resin-mobile-atc { display: none !important; }",
         "  .resin-mobile-atc__price { display: none; }",
         "  .resin-mobile-atc__icon { width: 16px; height: 16px; flex: 0 0 16px; }",
         "}"
@@ -277,6 +281,95 @@
     return { init: init, update: update };
   })();
 
+  window.ResinMobileOverlayLayer = (function() {
+    var mediaQuery = window.matchMedia ? window.matchMedia("(max-width: 767px)") : null;
+    var scheduled = false;
+
+    function isMobile() {
+      return mediaQuery ? mediaQuery.matches : window.innerWidth <= 767;
+    }
+
+    function isVisible(node) {
+      if (!node || node === document.body || node === document.documentElement) return false;
+      var rect = node.getBoundingClientRect();
+      if (rect.width < 120 || rect.height < 120) return false;
+      if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= window.innerHeight || rect.left >= window.innerWidth) return false;
+      var style = window.getComputedStyle(node);
+      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || 1) < 0.05) return false;
+      return true;
+    }
+
+    function looksLikeBlockingPanel(node) {
+      if (!isVisible(node)) return false;
+      var rect = node.getBoundingClientRect();
+      var style = window.getComputedStyle(node);
+      var area = rect.width * rect.height;
+      var screenArea = window.innerWidth * window.innerHeight;
+      var classText = String(node.className || "").toLowerCase();
+      var idText = String(node.id || "").toLowerCase();
+      var roleText = String(node.getAttribute("role") || "").toLowerCase();
+      var labelText = String(node.getAttribute("aria-label") || "").toLowerCase();
+      var text = "";
+      try { text = String(node.innerText || node.textContent || "").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 500); } catch (e) {}
+
+      if (node.closest(".woot-widget-holder, .woot-widget-bubble, .resin-mobile-atc")) return false;
+      if (style.position !== "fixed" && style.position !== "sticky" && roleText !== "dialog" && node.getAttribute("aria-modal") !== "true") return false;
+      if (area < screenArea * 0.22) return false;
+
+      return /drawer|modal|dialog|popup|cart|reward|loyalty|smile|points|coupon/.test(classText + " " + idText + " " + roleText + " " + labelText) ||
+        /society points|daily visit reward|my coupons|refer a friend|recently viewed|order note|discount|subtotal|view cart|checkout|cart\s*\d*/.test(text);
+    }
+
+    function update() {
+      if (!document.body) return;
+      if (!isMobile()) {
+        document.body.classList.remove("resin-mobile-overlay-open");
+        return;
+      }
+      var nodes = Array.prototype.slice.call(document.querySelectorAll([
+        "[role='dialog']",
+        "[aria-modal='true']",
+        ".drawer",
+        ".cart-drawer",
+        ".drawer__inner",
+        ".drawer__content",
+        ".modal",
+        ".popup",
+        "[class*='cart']",
+        "[class*='drawer']",
+        "[class*='reward']",
+        "[class*='loyalty']",
+        "[class*='smile']",
+        "[class*='points']"
+      ].join(",")));
+      var open = nodes.some(looksLikeBlockingPanel);
+      document.body.classList.toggle("resin-mobile-overlay-open", open);
+    }
+
+    function scheduleUpdate() {
+      if (scheduled) return;
+      scheduled = true;
+      window.requestAnimationFrame(function() {
+        scheduled = false;
+        update();
+      });
+    }
+
+    function init() {
+      update();
+      document.addEventListener("click", function() { setTimeout(scheduleUpdate, 80); }, true);
+      document.addEventListener("keyup", scheduleUpdate, true);
+      window.addEventListener("resize", scheduleUpdate);
+      window.addEventListener("orientationchange", scheduleUpdate);
+      if (window.MutationObserver) {
+        new MutationObserver(scheduleUpdate).observe(document.body || document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "aria-hidden", "aria-modal", "open"] });
+      }
+      setInterval(update, 800);
+    }
+
+    return { init: init, update: update };
+  })();
+
 
   // Resin Society chat sound layer: a short, Shopify-like soft chime.
   // Browsers only allow sound after shopper interaction, so this unlocks quietly on click/touch/key.
@@ -341,6 +434,7 @@
   window.addEventListener("chatwoot:ready", function() {
     if (window.ResinChatLauncher) window.ResinChatLauncher.init();
     if (window.ResinMobileAddToCart) window.ResinMobileAddToCart.init();
+    if (window.ResinMobileOverlayLayer) window.ResinMobileOverlayLayer.update();
     var bubble = document.querySelector(".woot-widget-bubble");
     if (!bubble || !window.MutationObserver) return;
     var hadUnread = bubble.classList.contains("unread-notification");
@@ -366,6 +460,7 @@
       setTimeout(function() {
         if (window.ResinChatLauncher) window.ResinChatLauncher.init();
         if (window.ResinMobileAddToCart) window.ResinMobileAddToCart.init();
+        if (window.ResinMobileOverlayLayer) window.ResinMobileOverlayLayer.update();
       }, 1500);
     };
   })(document, "script");
@@ -373,8 +468,10 @@
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function() {
       if (window.ResinMobileAddToCart) window.ResinMobileAddToCart.init();
+      if (window.ResinMobileOverlayLayer) window.ResinMobileOverlayLayer.init();
     });
   } else if (window.ResinMobileAddToCart) {
     window.ResinMobileAddToCart.init();
+    if (window.ResinMobileOverlayLayer) window.ResinMobileOverlayLayer.init();
   }
 </script>
