@@ -119,12 +119,34 @@
     }
 
     function productForm() {
-      return document.querySelector('form[action*="/cart/add"]');
+      var forms = Array.prototype.slice.call(document.querySelectorAll('form[action*="/cart/add"]'));
+      return forms.find(function(form) {
+        return form.id && /^ProductForm-/.test(form.id) && !/installment/i.test(form.className + " " + form.id);
+      }) || forms.find(function(form) {
+        return !/installment/i.test(form.className + " " + form.id) && form.querySelector('[name="id"]');
+      }) || null;
+    }
+
+    function isUsableButton(node) {
+      if (!node) return false;
+      var rect = node.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && !node.disabled && node.getAttribute("aria-disabled") !== "true";
+    }
+
+    function attrValue(value) {
+      return String(value || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     }
 
     function submitButton(form) {
-      if (!form) return null;
-      return form.querySelector('[type="submit"], button[name="add"], button[data-add-to-cart], .product-form__submit');
+      var candidates = [];
+      if (form) {
+        candidates = candidates.concat(Array.prototype.slice.call(form.querySelectorAll('[type="submit"], button[name="add"], button[data-add-to-cart], .product-form__submit')));
+        if (form.id) {
+          candidates = candidates.concat(Array.prototype.slice.call(document.querySelectorAll('[form="' + attrValue(form.id) + '"][type="submit"], button[form="' + attrValue(form.id) + '"][name="add"], button[form="' + attrValue(form.id) + '"].product-form__submit')));
+        }
+      }
+      candidates = candidates.concat(Array.prototype.slice.call(document.querySelectorAll('button[name="add"], button[data-add-to-cart], .product-form__submit')));
+      return candidates.find(isUsableButton) || candidates[0] || null;
     }
 
     function cleanText(text) {
@@ -135,6 +157,8 @@
       var selectors = [
         ".price__sale .price-item--sale",
         ".price-item--sale",
+        ".product__price",
+        ".price__regular",
         ".price-item--regular",
         "[data-product-price]",
         "[data-price]",
