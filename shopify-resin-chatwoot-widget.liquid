@@ -1,4 +1,32 @@
 <!-- Resin Society Chatwoot Website Chat -->
+<style id="resin-mobile-widget-layer-overrides">
+  @media (max-width: 767px) {
+    body.template-product product-sticky-form.product-sticky-form,
+    body.template-product .product-sticky-form,
+    body.template-product .product-sticky-form__card {
+      display: none !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+
+    body.resin-mobile-overlay-open .resin-mobile-atc,
+    body.resin-mobile-overlay-open .woot-widget-bubble,
+    body.resin-mobile-overlay-open .woot-widget-holder,
+    body.resin-mobile-overlay-open iframe[src*="chatwoot"],
+    body.resin-mobile-overlay-open #Avada-Joy_FloatingButton,
+    body.resin-mobile-overlay-open [id*="FloatingButton"][id*="Joy"],
+    body.resin-mobile-overlay-open [id*="FloatingButton"][id*="Reward"],
+    body.resin-mobile-overlay-open .resin-hidden-under-overlay,
+    body.resin-chat-panel-open .resin-mobile-atc,
+    body.resin-chat-panel-open #Avada-Joy_FloatingButton,
+    body.resin-chat-panel-open [id*="FloatingButton"][id*="Joy"],
+    body.resin-chat-panel-open [id*="FloatingButton"][id*="Reward"] {
+      display: none !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+  }
+</style>
 <script>
   window.chatwootSettings = {
     position: "right",
@@ -49,7 +77,14 @@
         "  body.resin-mobile-overlay-open .woot-widget-bubble,",
         "  body.resin-mobile-overlay-open .woot-widget-holder,",
         "  body.resin-mobile-overlay-open iframe[src*='chatwoot'],",
-        "  body.resin-mobile-overlay-open .resin-hidden-under-overlay { display: none !important; visibility: hidden !important; pointer-events: none !important; }",
+        "  body.resin-mobile-overlay-open #Avada-Joy_FloatingButton,",
+        "  body.resin-mobile-overlay-open [id*='FloatingButton'][id*='Joy'],",
+        "  body.resin-mobile-overlay-open [id*='FloatingButton'][id*='Reward'],",
+        "  body.resin-mobile-overlay-open .resin-hidden-under-overlay,",
+        "  body.resin-chat-panel-open .resin-mobile-atc,",
+        "  body.resin-chat-panel-open #Avada-Joy_FloatingButton,",
+        "  body.resin-chat-panel-open [id*='FloatingButton'][id*='Joy'],",
+        "  body.resin-chat-panel-open [id*='FloatingButton'][id*='Reward'] { display: none !important; visibility: hidden !important; pointer-events: none !important; }",
         "}"
       ].join("\n");
       document.head.appendChild(style);
@@ -89,7 +124,7 @@
         "  bottom: max(22px, calc(env(safe-area-inset-bottom) + 12px));",
         "  transform: translateX(-50%);",
         "  z-index: 2147483646;",
-        "  width: clamp(96px, 27vw, 108px);",
+        "  width: clamp(108px, 29vw, 126px);",
         "  min-height: 46px;",
         "  border: 0;",
         "  border-radius: 999px;",
@@ -99,10 +134,10 @@
         "  display: none;",
         "  align-items: center;",
         "  justify-content: center;",
-        "  gap: 4px;",
+        "  gap: 5px;",
         "  padding: 8px 10px;",
         "  font-family: Arial, sans-serif;",
-        "  font-size: 13px;",
+        "  font-size: 12.5px;",
         "  font-weight: 800;",
         "  letter-spacing: 0;",
         "  line-height: 1.1;",
@@ -271,7 +306,7 @@
     function setButtonText(state) {
       if (!button) return;
       var price = productPrice();
-      var label = state === "added" ? "Added" : state === "adding" ? "Adding" : "Add";
+      var label = state === "added" ? "Added" : state === "adding" ? "Adding" : "Add Bag";
       var icon = '<svg class="resin-mobile-atc__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6.25 8.5h11.5l-.78 10.03A2.2 2.2 0 0 1 14.78 20.5H9.22a2.2 2.2 0 0 1-2.19-1.97L6.25 8.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 8.5V7a3 3 0 0 1 6 0v1.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
       var html = icon + '<span class="resin-mobile-atc__label">' + label + '</span>' + (price ? '<span class="resin-mobile-atc__price">' + price + '</span>' : "");
       if (html !== lastHtml) {
@@ -440,6 +475,21 @@
       });
     }
 
+    function hideKnownFloatingLaunchers(includeChat) {
+      var selectors = [
+        ".resin-mobile-atc",
+        "#Avada-Joy_FloatingButton",
+        "[id*='FloatingButton'][id*='Joy']",
+        "[id*='FloatingButton'][id*='Reward']"
+      ];
+      if (includeChat) {
+        selectors.push(".woot-widget-bubble", ".woot-widget-holder", "iframe[src*='chatwoot']");
+      }
+      Array.prototype.slice.call(document.querySelectorAll(selectors.join(","))).forEach(function(node) {
+        setHiddenUnderOverlay(node, true);
+      });
+    }
+
     function update() {
       if (!document.body) return;
       if (!isMobile()) {
@@ -465,8 +515,13 @@
       ].join(",")));
       var open = nodes.some(looksLikeBlockingPanel);
       document.body.classList.toggle("resin-mobile-overlay-open", open);
-      if (open) hideFloatingWidgetsUnderOverlay();
-      else clearHiddenUnderOverlay();
+      if (open) {
+        hideFloatingWidgetsUnderOverlay();
+        hideKnownFloatingLaunchers(true);
+      } else {
+        clearHiddenUnderOverlay();
+        if (document.body.classList.contains("resin-chat-panel-open")) hideKnownFloatingLaunchers(false);
+      }
     }
 
     function scheduleUpdate() {
@@ -551,7 +606,14 @@
   })();
 
   window.addEventListener("chatwoot:opened", function() {
+    if (document.body) document.body.classList.add("resin-chat-panel-open");
     if (window.ResinChatSound) window.ResinChatSound.unlock();
+    if (window.ResinMobileOverlayLayer) window.ResinMobileOverlayLayer.update();
+  });
+
+  window.addEventListener("chatwoot:closed", function() {
+    if (document.body) document.body.classList.remove("resin-chat-panel-open");
+    if (window.ResinMobileOverlayLayer) window.ResinMobileOverlayLayer.update();
   });
 
   window.addEventListener("chatwoot:ready", function() {
