@@ -6,6 +6,99 @@
     launcherTitle: "Ask us anything :)"
   };
 
+  window.ResinChatDismiss = (function() {
+    var hidden = false;
+    var closeButton = null;
+    var restoreButton = null;
+    var styleId = "resin-chat-dismiss-style";
+
+    function ensureStyles() {
+      if (document.getElementById(styleId)) return;
+      var style = document.createElement("style");
+      style.id = styleId;
+      style.textContent = [
+        "body.resin-chat-hidden .woot-widget-bubble,",
+        "body.resin-chat-hidden .woot-widget-holder,",
+        "body.resin-chat-hidden iframe[src*='chatwoot'] { display: none !important; }",
+        ".resin-chat-dismiss-button, .resin-chat-restore-button {",
+        "  position: fixed;",
+        "  right: 22px;",
+        "  z-index: 2147483647;",
+        "  border: 0;",
+        "  background: #111;",
+        "  color: #fff;",
+        "  box-shadow: 0 8px 24px rgba(0,0,0,.22);",
+        "  cursor: pointer;",
+        "  font-family: Arial, sans-serif;",
+        "}",
+        ".resin-chat-dismiss-button {",
+        "  bottom: 104px;",
+        "  width: 32px;",
+        "  height: 32px;",
+        "  border-radius: 50%;",
+        "  font-size: 20px;",
+        "  line-height: 32px;",
+        "  display: flex;",
+        "  align-items: center;",
+        "  justify-content: center;",
+        "}",
+        ".resin-chat-restore-button {",
+        "  bottom: 24px;",
+        "  min-width: 76px;",
+        "  height: 44px;",
+        "  border-radius: 999px;",
+        "  padding: 0 18px;",
+        "  font-size: 15px;",
+        "  font-weight: 700;",
+        "  letter-spacing: 0;",
+        "  display: none;",
+        "}",
+        "body.resin-chat-hidden .resin-chat-dismiss-button { display: none !important; }",
+        "body.resin-chat-hidden .resin-chat-restore-button { display: block !important; }",
+        "@media (max-width: 767px) {",
+        "  .resin-chat-dismiss-button { right: 18px; bottom: 96px; }",
+        "  .resin-chat-restore-button { right: 18px; bottom: 20px; }",
+        "}"
+      ].join("\n");
+      document.head.appendChild(style);
+    }
+
+    function setHidden(nextHidden) {
+      hidden = !!nextHidden;
+      document.body.classList.toggle("resin-chat-hidden", hidden);
+      if (hidden && window.$chatwoot && typeof window.$chatwoot.toggle === "function") {
+        try { window.$chatwoot.toggle("close"); } catch (e) {}
+      }
+    }
+
+    function ensureControls() {
+      ensureStyles();
+      if (!closeButton) {
+        closeButton = document.createElement("button");
+        closeButton.type = "button";
+        closeButton.className = "resin-chat-dismiss-button";
+        closeButton.setAttribute("aria-label", "Hide chat");
+        closeButton.setAttribute("title", "Hide chat");
+        closeButton.textContent = "x";
+        closeButton.addEventListener("click", function() { setHidden(true); });
+        document.body.appendChild(closeButton);
+      }
+      if (!restoreButton) {
+        restoreButton = document.createElement("button");
+        restoreButton.type = "button";
+        restoreButton.className = "resin-chat-restore-button";
+        restoreButton.setAttribute("aria-label", "Show chat");
+        restoreButton.setAttribute("title", "Show chat");
+        restoreButton.textContent = "Chat";
+        restoreButton.addEventListener("click", function() { setHidden(false); });
+        document.body.appendChild(restoreButton);
+      }
+      setHidden(hidden);
+    }
+
+    return { init: ensureControls, hide: function() { setHidden(true); }, show: function() { setHidden(false); } };
+  })();
+
 
   // Resin Society chat sound layer: a short, Shopify-like soft chime.
   // Browsers only allow sound after shopper interaction, so this unlocks quietly on click/touch/key.
@@ -68,6 +161,7 @@
   });
 
   window.addEventListener("chatwoot:ready", function() {
+    if (window.ResinChatDismiss) window.ResinChatDismiss.init();
     var bubble = document.querySelector(".woot-widget-bubble");
     if (!bubble || !window.MutationObserver) return;
     var hadUnread = bubble.classList.contains("unread-notification");
@@ -90,6 +184,9 @@
         websiteToken: "SMYqoySVCMAUg16jTfGRhyNg",
         baseUrl: BASE_URL
       });
+      setTimeout(function() {
+        if (window.ResinChatDismiss) window.ResinChatDismiss.init();
+      }, 1500);
     };
   })(document, "script");
 </script>
