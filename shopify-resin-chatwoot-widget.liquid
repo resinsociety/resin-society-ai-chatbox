@@ -10,6 +10,7 @@
     }
 
     body.resin-mobile-overlay-open .resin-mobile-atc,
+    body.resin-mobile-overlay-open [data-resin-section-mobile-atc],
     body.resin-mobile-overlay-open .woot-widget-bubble,
     body.resin-mobile-overlay-open .woot-widget-holder,
     body.resin-mobile-overlay-open iframe[src*="chatwoot"],
@@ -17,7 +18,13 @@
     body.resin-mobile-overlay-open [id*="FloatingButton"][id*="Joy"],
     body.resin-mobile-overlay-open [id*="FloatingButton"][id*="Reward"],
     body.resin-mobile-overlay-open .resin-hidden-under-overlay,
+    body.resin-rewards-panel-open .resin-mobile-atc,
+    body.resin-rewards-panel-open [data-resin-section-mobile-atc],
+    body.resin-rewards-panel-open .woot-widget-bubble,
+    body.resin-rewards-panel-open .woot-widget-holder,
+    body.resin-rewards-panel-open iframe[src*="chatwoot"],
     body.resin-chat-panel-open .resin-mobile-atc,
+    body.resin-chat-panel-open [data-resin-section-mobile-atc],
     body.resin-chat-panel-open #Avada-Joy_FloatingButton,
     body.resin-chat-panel-open [id*="FloatingButton"][id*="Joy"],
     body.resin-chat-panel-open [id*="FloatingButton"][id*="Reward"] {
@@ -74,6 +81,7 @@
         ".woot-widget-bubble.woot--close svg { display: block !important; }",
         "@media (max-width: 767px) {",
         "  .woot-widget-bubble { min-width: 72px !important; height: 42px !important; padding: 0 16px !important; }",
+        "  body.resin-mobile-overlay-open [data-resin-section-mobile-atc],",
         "  body.resin-mobile-overlay-open .woot-widget-bubble,",
         "  body.resin-mobile-overlay-open .woot-widget-holder,",
         "  body.resin-mobile-overlay-open iframe[src*='chatwoot'],",
@@ -81,7 +89,13 @@
         "  body.resin-mobile-overlay-open [id*='FloatingButton'][id*='Joy'],",
         "  body.resin-mobile-overlay-open [id*='FloatingButton'][id*='Reward'],",
         "  body.resin-mobile-overlay-open .resin-hidden-under-overlay,",
+        "  body.resin-rewards-panel-open .resin-mobile-atc,",
+        "  body.resin-rewards-panel-open [data-resin-section-mobile-atc],",
+        "  body.resin-rewards-panel-open .woot-widget-bubble,",
+        "  body.resin-rewards-panel-open .woot-widget-holder,",
+        "  body.resin-rewards-panel-open iframe[src*='chatwoot'],",
         "  body.resin-chat-panel-open .resin-mobile-atc,",
+        "  body.resin-chat-panel-open [data-resin-section-mobile-atc],",
         "  body.resin-chat-panel-open #Avada-Joy_FloatingButton,",
         "  body.resin-chat-panel-open [id*='FloatingButton'][id*='Joy'],",
         "  body.resin-chat-panel-open [id*='FloatingButton'][id*='Reward'] { display: none !important; visibility: hidden !important; pointer-events: none !important; }",
@@ -300,24 +314,33 @@
       try {
         var context = new AudioContextClass();
         if (context.state === "suspended") context.resume();
+        var master = context.createGain();
+        master.gain.setValueAtTime(0.0001, context.currentTime);
+        master.gain.exponentialRampToValueAtTime(0.78, context.currentTime + 0.025);
+        master.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.72);
+        master.connect(context.destination);
+
         [
-          { f: 523.25, t: 0.00, d: 0.09, g: 0.035 },
-          { f: 659.25, t: 0.08, d: 0.10, g: 0.032 },
-          { f: 783.99, t: 0.17, d: 0.14, g: 0.03 }
+          { f: 523.25, t: 0.00, d: 0.11, g: 0.040, type: "triangle" },
+          { f: 659.25, t: 0.07, d: 0.12, g: 0.045, type: "triangle" },
+          { f: 783.99, t: 0.14, d: 0.13, g: 0.048, type: "triangle" },
+          { f: 1046.50, t: 0.23, d: 0.16, g: 0.036, type: "sine" },
+          { f: 1567.98, t: 0.34, d: 0.10, g: 0.018, type: "sine" },
+          { f: 2093.00, t: 0.43, d: 0.13, g: 0.014, type: "sine" }
         ].forEach(function(note) {
           var osc = context.createOscillator();
           var gain = context.createGain();
-          osc.type = "triangle";
+          osc.type = note.type;
           osc.frequency.setValueAtTime(note.f, context.currentTime + note.t);
           gain.gain.setValueAtTime(0.0001, context.currentTime + note.t);
           gain.gain.exponentialRampToValueAtTime(note.g, context.currentTime + note.t + 0.015);
           gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + note.t + note.d);
           osc.connect(gain);
-          gain.connect(context.destination);
+          gain.connect(master);
           osc.start(context.currentTime + note.t);
           osc.stop(context.currentTime + note.t + note.d + 0.03);
         });
-        setTimeout(function() { context.close && context.close(); }, 700);
+        setTimeout(function() { context.close && context.close(); }, 1000);
       } catch (e) {}
     }
 
@@ -430,7 +453,7 @@
       setInterval(update, 700);
     }
 
-    return { init: init, update: update };
+    return { init: init, update: update, playRewardSound: playRewardSound };
   })();
 
   window.ResinMobileOverlayLayer = (function() {
@@ -458,6 +481,7 @@
       var style = window.getComputedStyle(node);
       var area = rect.width * rect.height;
       var screenArea = window.innerWidth * window.innerHeight;
+      var tagText = String(node.tagName || "").toLowerCase();
       var classText = String(node.className || "").toLowerCase();
       var idText = String(node.id || "").toLowerCase();
       var roleText = String(node.getAttribute("role") || "").toLowerCase();
@@ -468,9 +492,25 @@
       if (node.closest(".woot-widget-holder, .woot-widget-bubble, .resin-mobile-atc")) return false;
       if (style.position !== "fixed" && style.position !== "sticky" && roleText !== "dialog" && node.getAttribute("aria-modal") !== "true") return false;
       if (area < screenArea * 0.22) return false;
+      if (/joy|loyalty|avada/.test(tagText + " " + classText + " " + idText) && area > screenArea * 0.55) return true;
 
       return /drawer|modal|dialog|popup|cart|reward|loyalty|smile|points|coupon/.test(classText + " " + idText + " " + roleText + " " + labelText) ||
         /society points|daily visit reward|my coupons|refer a friend|recently viewed|order note|discount|subtotal|view cart|checkout|cart\s*\d*/.test(text);
+    }
+
+    function looksLikeRewardsPanel(node) {
+      if (!isVisible(node)) return false;
+      var rect = node.getBoundingClientRect();
+      var area = rect.width * rect.height;
+      var screenArea = window.innerWidth * window.innerHeight;
+      var tagText = String(node.tagName || "").toLowerCase();
+      var classText = String(node.className || "").toLowerCase();
+      var idText = String(node.id || "").toLowerCase();
+      var text = "";
+      try { text = String(node.innerText || node.textContent || "").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 500); } catch (e) {}
+      return area > screenArea * 0.45 &&
+        (/joy|loyalty|avada/.test(tagText + " " + classText + " " + idText) ||
+          /society points|daily visit reward|my coupons|refer a friend|view profile/.test(text));
     }
 
     function isSmallBottomFloating(node) {
@@ -533,6 +573,7 @@
     function hideKnownFloatingLaunchers(includeChat) {
       var selectors = [
         ".resin-mobile-atc",
+        "[data-resin-section-mobile-atc]",
         "#Avada-Joy_FloatingButton",
         "[id*='FloatingButton'][id*='Joy']",
         "[id*='FloatingButton'][id*='Reward']"
@@ -549,6 +590,7 @@
       if (!document.body) return;
       if (!isMobile()) {
         document.body.classList.remove("resin-mobile-overlay-open");
+        document.body.classList.remove("resin-rewards-panel-open");
         clearHiddenUnderOverlay();
         return;
       }
@@ -561,6 +603,12 @@
         ".drawer__content",
         ".modal",
         ".popup",
+        "joy-loyalty-widget",
+        "joy-rewards-widget",
+        "[id*='Avada-Joy']",
+        "[class*='Avada-Joy']",
+        "[class*='joy-loyalty']",
+        "[class*='loyalty-widget']",
         "[class*='cart']",
         "[class*='drawer']",
         "[class*='reward']",
@@ -569,7 +617,9 @@
         "[class*='points']"
       ].join(",")));
       var open = nodes.some(looksLikeBlockingPanel);
+      var rewardsOpen = nodes.some(looksLikeRewardsPanel);
       document.body.classList.toggle("resin-mobile-overlay-open", open);
+      document.body.classList.toggle("resin-rewards-panel-open", rewardsOpen);
       if (open) {
         hideFloatingWidgetsUnderOverlay();
         hideKnownFloatingLaunchers(true);
