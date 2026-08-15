@@ -17,7 +17,6 @@
     body.resin-mobile-overlay-open #Avada-Joy_FloatingButton,
     body.resin-mobile-overlay-open [id*="FloatingButton"][id*="Joy"],
     body.resin-mobile-overlay-open [id*="FloatingButton"][id*="Reward"],
-    body.resin-mobile-overlay-open .resin-hidden-under-overlay,
     body.resin-rewards-panel-open .resin-mobile-atc,
     body.resin-rewards-panel-open [data-resin-section-mobile-atc],
     body.resin-rewards-panel-open .woot-widget-bubble,
@@ -88,7 +87,6 @@
         "  body.resin-mobile-overlay-open #Avada-Joy_FloatingButton,",
         "  body.resin-mobile-overlay-open [id*='FloatingButton'][id*='Joy'],",
         "  body.resin-mobile-overlay-open [id*='FloatingButton'][id*='Reward'],",
-        "  body.resin-mobile-overlay-open .resin-hidden-under-overlay,",
         "  body.resin-rewards-panel-open .resin-mobile-atc,",
         "  body.resin-rewards-panel-open [data-resin-section-mobile-atc],",
         "  body.resin-rewards-panel-open .woot-widget-bubble,",
@@ -459,13 +457,12 @@
   window.ResinMobileOverlayLayer = (function() {
     var mediaQuery = window.matchMedia ? window.matchMedia("(max-width: 767px)") : null;
     var scheduled = false;
-    var hiddenNodes = [];
 
     function isMobile() {
       return mediaQuery ? mediaQuery.matches : window.innerWidth <= 767;
     }
 
-    function isVisible(node) {
+    function isVisiblePanel(node) {
       if (!node || node === document.body || node === document.documentElement) return false;
       var rect = node.getBoundingClientRect();
       if (rect.width < 120 || rect.height < 120) return false;
@@ -475,115 +472,48 @@
       return true;
     }
 
-    function looksLikeBlockingPanel(node) {
-      if (!isVisible(node)) return false;
+    function panelText(node) {
+      try {
+        return String(node.innerText || node.textContent || "").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 600);
+      } catch (e) {
+        return "";
+      }
+    }
+
+    function nodeIdentity(node) {
+      return [
+        String(node.tagName || ""),
+        String(node.className || ""),
+        String(node.id || ""),
+        String(node.getAttribute && node.getAttribute("role") || ""),
+        String(node.getAttribute && node.getAttribute("aria-label") || "")
+      ].join(" ").toLowerCase();
+    }
+
+    function largeEnoughForOverlay(node, threshold) {
       var rect = node.getBoundingClientRect();
-      var style = window.getComputedStyle(node);
       var area = rect.width * rect.height;
-      var screenArea = window.innerWidth * window.innerHeight;
-      var tagText = String(node.tagName || "").toLowerCase();
-      var classText = String(node.className || "").toLowerCase();
-      var idText = String(node.id || "").toLowerCase();
-      var roleText = String(node.getAttribute("role") || "").toLowerCase();
-      var labelText = String(node.getAttribute("aria-label") || "").toLowerCase();
-      var text = "";
-      try { text = String(node.innerText || node.textContent || "").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 500); } catch (e) {}
-
-      if (node.closest(".woot-widget-holder, .woot-widget-bubble, .resin-mobile-atc")) return false;
-      if (style.position !== "fixed" && style.position !== "sticky" && roleText !== "dialog" && node.getAttribute("aria-modal") !== "true") return false;
-      if (area < screenArea * 0.22) return false;
-      if (/joy|loyalty|avada/.test(tagText + " " + classText + " " + idText) && area > screenArea * 0.55) return true;
-
-      return /drawer|modal|dialog|popup|cart|reward|loyalty|smile|points|coupon/.test(classText + " " + idText + " " + roleText + " " + labelText) ||
-        /society points|daily visit reward|my coupons|refer a friend|recently viewed|order note|discount|subtotal|view cart|checkout|cart\s*\d*/.test(text);
+      return area >= window.innerWidth * window.innerHeight * threshold;
     }
 
     function looksLikeRewardsPanel(node) {
-      if (!isVisible(node)) return false;
-      var rect = node.getBoundingClientRect();
-      var area = rect.width * rect.height;
-      var screenArea = window.innerWidth * window.innerHeight;
-      var tagText = String(node.tagName || "").toLowerCase();
-      var classText = String(node.className || "").toLowerCase();
-      var idText = String(node.id || "").toLowerCase();
-      var text = "";
-      try { text = String(node.innerText || node.textContent || "").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 500); } catch (e) {}
-      return area > screenArea * 0.45 &&
-        (/joy|loyalty|avada/.test(tagText + " " + classText + " " + idText) ||
-          /society points|daily visit reward|my coupons|refer a friend|view profile/.test(text));
+      if (!isVisiblePanel(node) || !largeEnoughForOverlay(node, 0.42)) return false;
+      var identity = nodeIdentity(node);
+      var text = panelText(node);
+      return /joy|loyalty|avada/.test(identity) ||
+        /society points|daily visit reward|my coupons|refer a friend|view profile/.test(text);
     }
 
-    function isSmallBottomFloating(node) {
-      if (!isVisible(node)) return false;
-      var rect = node.getBoundingClientRect();
+    function looksLikeCartOrDrawer(node) {
+      if (!isVisiblePanel(node) || !largeEnoughForOverlay(node, 0.24)) return false;
+      if (node.closest(".woot-widget-holder, .woot-widget-bubble, .resin-mobile-atc")) return false;
       var style = window.getComputedStyle(node);
-      if (style.position !== "fixed" && style.position !== "sticky") return false;
-      if (rect.bottom < window.innerHeight - 210 || rect.top > window.innerHeight - 12) return false;
-      if (rect.width > window.innerWidth * 0.94 && rect.height > 210) return false;
-      if (rect.width < 38 || rect.height < 34 || rect.height > 210) return false;
-      if (node.closest("[role='dialog'], [aria-modal='true'], .drawer, .cart-drawer, .modal, .popup")) return false;
-      return true;
-    }
-
-    function setHiddenUnderOverlay(node, hidden) {
-      if (!node || node === document.body || node === document.documentElement) return;
-      if (hidden) {
-        if (node.dataset.resinOverlayHidden === "1") return;
-        node.dataset.resinOverlayHidden = "1";
-        node.dataset.resinOverlayDisplay = node.style.display || "";
-        node.dataset.resinOverlayVisibility = node.style.visibility || "";
-        node.dataset.resinOverlayPointerEvents = node.style.pointerEvents || "";
-        node.classList.add("resin-hidden-under-overlay");
-        node.style.setProperty("display", "none", "important");
-        node.style.setProperty("visibility", "hidden", "important");
-        node.style.setProperty("pointer-events", "none", "important");
-        hiddenNodes.push(node);
-      } else if (node.dataset.resinOverlayHidden === "1") {
-        node.classList.remove("resin-hidden-under-overlay");
-        node.style.display = node.dataset.resinOverlayDisplay || "";
-        node.style.visibility = node.dataset.resinOverlayVisibility || "";
-        node.style.pointerEvents = node.dataset.resinOverlayPointerEvents || "";
-        delete node.dataset.resinOverlayHidden;
-        delete node.dataset.resinOverlayDisplay;
-        delete node.dataset.resinOverlayVisibility;
-        delete node.dataset.resinOverlayPointerEvents;
-      }
-    }
-
-    function clearHiddenUnderOverlay() {
-      hiddenNodes = hiddenNodes.filter(function(node) {
-        if (node && node.isConnected && node.dataset.resinOverlayHidden === "1") setHiddenUnderOverlay(node, false);
-        return false;
-      });
-    }
-
-    function hideFloatingWidgetsUnderOverlay() {
-      var nodes = Array.prototype.slice.call(document.body.querySelectorAll("*"));
-      nodes.forEach(function(node) {
-        if (!isSmallBottomFloating(node)) return;
-        var classText = String(node.className || "").toLowerCase();
-        var idText = String(node.id || "").toLowerCase();
-        var text = "";
-        try { text = String(node.innerText || node.textContent || "").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 220); } catch (e) {}
-        var launcherish = /reward|loyalty|smile|points|chat|woot|launcher|bubble|sticky|cart|bag|add/.test(classText + " " + idText + " " + text);
-        if (launcherish || node.classList.contains("resin-mobile-atc")) setHiddenUnderOverlay(node, true);
-      });
-    }
-
-    function hideKnownFloatingLaunchers(includeChat) {
-      var selectors = [
-        ".resin-mobile-atc",
-        "[data-resin-section-mobile-atc]",
-        "#Avada-Joy_FloatingButton",
-        "[id*='FloatingButton'][id*='Joy']",
-        "[id*='FloatingButton'][id*='Reward']"
-      ];
-      if (includeChat) {
-        selectors.push(".woot-widget-bubble", ".woot-widget-holder", "iframe[src*='chatwoot']");
-      }
-      Array.prototype.slice.call(document.querySelectorAll(selectors.join(","))).forEach(function(node) {
-        setHiddenUnderOverlay(node, true);
-      });
+      var identity = nodeIdentity(node);
+      var text = panelText(node);
+      var modalish = style.position === "fixed" || node.getAttribute("aria-modal") === "true" || /dialog|drawer|modal|popup/.test(identity);
+      if (!modalish) return false;
+      return /drawer|modal|dialog|popup|cart-drawer|cart drawer/.test(identity) ||
+        /recently viewed|order note|discount|subtotal|view cart|checkout|cart\s*\d*/.test(text);
     }
 
     function update() {
@@ -591,9 +521,9 @@
       if (!isMobile()) {
         document.body.classList.remove("resin-mobile-overlay-open");
         document.body.classList.remove("resin-rewards-panel-open");
-        clearHiddenUnderOverlay();
         return;
       }
+
       var nodes = Array.prototype.slice.call(document.querySelectorAll([
         "[role='dialog']",
         "[aria-modal='true']",
@@ -608,25 +538,12 @@
         "[id*='Avada-Joy']",
         "[class*='Avada-Joy']",
         "[class*='joy-loyalty']",
-        "[class*='loyalty-widget']",
-        "[class*='cart']",
-        "[class*='drawer']",
-        "[class*='reward']",
-        "[class*='loyalty']",
-        "[class*='smile']",
-        "[class*='points']"
+        "[class*='loyalty-widget']"
       ].join(",")));
-      var open = nodes.some(looksLikeBlockingPanel);
       var rewardsOpen = nodes.some(looksLikeRewardsPanel);
-      document.body.classList.toggle("resin-mobile-overlay-open", open);
+      var drawerOpen = nodes.some(looksLikeCartOrDrawer);
       document.body.classList.toggle("resin-rewards-panel-open", rewardsOpen);
-      if (open) {
-        hideFloatingWidgetsUnderOverlay();
-        hideKnownFloatingLaunchers(true);
-      } else {
-        clearHiddenUnderOverlay();
-        if (document.body.classList.contains("resin-chat-panel-open")) hideKnownFloatingLaunchers(false);
-      }
+      document.body.classList.toggle("resin-mobile-overlay-open", rewardsOpen || drawerOpen);
     }
 
     function scheduleUpdate() {
@@ -640,14 +557,14 @@
 
     function init() {
       update();
-      document.addEventListener("click", function() { setTimeout(scheduleUpdate, 80); }, true);
+      document.addEventListener("click", function() { setTimeout(scheduleUpdate, 120); }, true);
       document.addEventListener("keyup", scheduleUpdate, true);
       window.addEventListener("resize", scheduleUpdate);
       window.addEventListener("orientationchange", scheduleUpdate);
       if (window.MutationObserver) {
-        new MutationObserver(scheduleUpdate).observe(document.body || document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "aria-hidden", "aria-modal", "open"] });
+        new MutationObserver(scheduleUpdate).observe(document.body || document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "aria-hidden", "aria-modal", "open"] });
       }
-      setInterval(update, 800);
+      setInterval(update, 900);
     }
 
     return { init: init, update: update };
