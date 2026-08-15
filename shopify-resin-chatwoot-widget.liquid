@@ -121,6 +121,8 @@
         "  [class*='sticky_product'],",
         "  [class*='sticky-atc'],",
         "  [class*='sticky_atc'],",
+        "  [class*='product-form-sticky'],",
+        "  [class*='product_form_sticky'],",
         "  [class*='sticky-add-to-cart'],",
         "  [class*='sticky_add_to_cart'] {",
         "    display: none !important;",
@@ -145,15 +147,37 @@
         "[class*='sticky_product']",
         "[class*='sticky-atc']",
         "[class*='sticky_atc']",
+        "[class*='product-form-sticky']",
+        "[class*='product_form_sticky']",
         "[class*='sticky-add-to-cart']",
         "[class*='sticky_add_to_cart']"
       ];
       Array.prototype.slice.call(document.querySelectorAll(selectors.join(","))).forEach(function(node) {
-        if (node.closest(".resin-mobile-atc")) return;
-        node.style.setProperty("display", "none", "important");
-        node.style.setProperty("visibility", "hidden", "important");
-        node.style.setProperty("pointer-events", "none", "important");
+        hideNode(node);
       });
+      Array.prototype.slice.call(document.body.querySelectorAll("*")).forEach(function(node) {
+        var rect = node.getBoundingClientRect();
+        var style = window.getComputedStyle(node);
+        if (style.position !== "fixed" && style.position !== "sticky") return;
+        if (rect.width < window.innerWidth * 0.72 || rect.height < 48 || rect.height > 190) return;
+        if (rect.bottom < window.innerHeight - 170 || rect.top > window.innerHeight - 35) return;
+        if (node.closest(".resin-mobile-atc, .woot-widget-bubble, .woot-widget-holder")) return;
+        var classText = String(node.className || "").toLowerCase();
+        var idText = String(node.id || "").toLowerCase();
+        var text = "";
+        try { text = String(node.innerText || node.textContent || "").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 260); } catch (e) {}
+        var hasProductAction = !!node.querySelector('form[action*="/cart/add"], button[name="add"], button[data-add-to-cart], .product-form__submit, [class*="product-form"], [class*="add-to-cart"], [class*="cart"]');
+        var looksLikeProductBar = /product|variant|sticky|cart|add/.test(classText + " " + idText) || /\$|add|cart|bag|checkout/.test(text);
+        var looksLikeRewardOrChat = /reward|loyalty|smile|points|chat|woot/.test(classText + " " + idText + " " + text);
+        if (hasProductAction && looksLikeProductBar && !looksLikeRewardOrChat) hideNode(node);
+      });
+    }
+
+    function hideNode(node) {
+      if (!node || node.closest(".resin-mobile-atc, .woot-widget-bubble, .woot-widget-holder")) return;
+      node.style.setProperty("display", "none", "important");
+      node.style.setProperty("visibility", "hidden", "important");
+      node.style.setProperty("pointer-events", "none", "important");
     }
 
     function productForm() {
@@ -310,6 +334,7 @@
       update();
       setTimeout(update, 800);
       setTimeout(update, 1800);
+      setInterval(update, 700);
     }
 
     return { init: init, update: update };
