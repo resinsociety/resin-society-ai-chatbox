@@ -58,6 +58,199 @@
     return { init: init };
   })();
 
+  window.ResinMobileAddToCart = (function() {
+    var button = null;
+    var styleId = "resin-mobile-atc-style";
+    var mediaQuery = window.matchMedia ? window.matchMedia("(max-width: 767px)") : null;
+    var adding = false;
+    var scheduled = false;
+    var lastHtml = "";
+
+    function isMobile() {
+      return mediaQuery ? mediaQuery.matches : window.innerWidth <= 767;
+    }
+
+    function isProductPage() {
+      return /^\/products\//.test(window.location.pathname);
+    }
+
+    function ensureStyles() {
+      if (document.getElementById(styleId)) return;
+      var style = document.createElement("style");
+      style.id = styleId;
+      style.textContent = [
+        ".resin-mobile-atc {",
+        "  position: fixed;",
+        "  left: 50%;",
+        "  bottom: max(22px, calc(env(safe-area-inset-bottom) + 12px));",
+        "  transform: translateX(-50%);",
+        "  z-index: 2147483646;",
+        "  width: clamp(154px, 42vw, 218px);",
+        "  min-height: 46px;",
+        "  border: 0;",
+        "  border-radius: 999px;",
+        "  background: #8f3328;",
+        "  color: #fff;",
+        "  box-shadow: 0 12px 32px rgba(0,0,0,.24);",
+        "  display: none;",
+        "  align-items: center;",
+        "  justify-content: center;",
+        "  gap: 7px;",
+        "  padding: 8px 16px;",
+        "  font-family: Arial, sans-serif;",
+        "  font-size: 14px;",
+        "  font-weight: 800;",
+        "  letter-spacing: 0;",
+        "  line-height: 1.1;",
+        "  cursor: pointer;",
+        "  -webkit-tap-highlight-color: transparent;",
+        "}",
+        ".resin-mobile-atc.is-visible { display: flex; }",
+        ".resin-mobile-atc[disabled] { opacity: .55; cursor: not-allowed; }",
+        ".resin-mobile-atc__price { font-weight: 700; opacity: .92; white-space: nowrap; }",
+        ".resin-mobile-atc__label { white-space: nowrap; }",
+        "@media (min-width: 768px) { .resin-mobile-atc { display: none !important; } }",
+        "@media (max-width: 380px) {",
+        "  .resin-mobile-atc { width: 138px; padding-left: 12px; padding-right: 12px; font-size: 13px; }",
+        "  .resin-mobile-atc__price { display: none; }",
+        "}"
+      ].join("\n");
+      document.head.appendChild(style);
+    }
+
+    function productForm() {
+      return document.querySelector('form[action*="/cart/add"]');
+    }
+
+    function submitButton(form) {
+      if (!form) return null;
+      return form.querySelector('[type="submit"], button[name="add"], button[data-add-to-cart], .product-form__submit');
+    }
+
+    function cleanText(text) {
+      return (text || "").replace(/\s+/g, " ").trim();
+    }
+
+    function productPrice() {
+      var selectors = [
+        ".price__sale .price-item--sale",
+        ".price-item--sale",
+        ".price-item--regular",
+        "[data-product-price]",
+        "[data-price]",
+        ".product__price .money",
+        ".price .money"
+      ];
+      for (var i = 0; i < selectors.length; i += 1) {
+        var node = document.querySelector(selectors[i]);
+        var text = cleanText(node && node.textContent);
+        if (text && /\$|\d/.test(text)) return text;
+      }
+      return "";
+    }
+
+    function playRewardSound() {
+      if (window.ResinChatSound && typeof window.ResinChatSound.unlock === "function") {
+        window.ResinChatSound.unlock();
+      }
+      var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      try {
+        var context = new AudioContextClass();
+        if (context.state === "suspended") context.resume();
+        [
+          { f: 523.25, t: 0.00, d: 0.09, g: 0.035 },
+          { f: 659.25, t: 0.08, d: 0.10, g: 0.032 },
+          { f: 783.99, t: 0.17, d: 0.14, g: 0.03 }
+        ].forEach(function(note) {
+          var osc = context.createOscillator();
+          var gain = context.createGain();
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(note.f, context.currentTime + note.t);
+          gain.gain.setValueAtTime(0.0001, context.currentTime + note.t);
+          gain.gain.exponentialRampToValueAtTime(note.g, context.currentTime + note.t + 0.015);
+          gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + note.t + note.d);
+          osc.connect(gain);
+          gain.connect(context.destination);
+          osc.start(context.currentTime + note.t);
+          osc.stop(context.currentTime + note.t + note.d + 0.03);
+        });
+        setTimeout(function() { context.close && context.close(); }, 700);
+      } catch (e) {}
+    }
+
+    function setButtonText(state) {
+      if (!button) return;
+      var price = productPrice();
+      var label = state === "added" ? "Added" : state === "adding" ? "Adding" : "Add";
+      var html = '<span class="resin-mobile-atc__label">' + label + '</span>' + (price ? '<span class="resin-mobile-atc__price">' + price + '</span>' : "");
+      if (html !== lastHtml) {
+        button.innerHTML = html;
+        lastHtml = html;
+      }
+      button.setAttribute("aria-label", price ? label + " to cart, " + price : label + " to cart");
+    }
+
+    function update() {
+      if (!button) return;
+      var form = productForm();
+      var nativeButton = submitButton(form);
+      var shouldShow = isMobile() && isProductPage() && form && nativeButton;
+      button.classList.toggle("is-visible", !!shouldShow);
+      if (!shouldShow) return;
+      var disabled = nativeButton.disabled || nativeButton.getAttribute("aria-disabled") === "true";
+      if (button.disabled !== !!disabled) button.disabled = !!disabled;
+      setButtonText(adding ? "adding" : "add");
+    }
+
+    function scheduleUpdate() {
+      if (scheduled) return;
+      scheduled = true;
+      window.requestAnimationFrame(function() {
+        scheduled = false;
+        update();
+      });
+    }
+
+    function clickNativeAdd() {
+      var form = productForm();
+      var nativeButton = submitButton(form);
+      if (!form || !nativeButton || nativeButton.disabled || adding) return;
+      adding = true;
+      setButtonText("adding");
+      playRewardSound();
+      nativeButton.click();
+      setTimeout(function() {
+        adding = false;
+        setButtonText("added");
+        setTimeout(update, 1200);
+      }, 900);
+    }
+
+    function init() {
+      if (!isProductPage()) return;
+      ensureStyles();
+      if (!button) {
+        button = document.createElement("button");
+        button.type = "button";
+        button.className = "resin-mobile-atc";
+        button.addEventListener("click", clickNativeAdd);
+        document.body.appendChild(button);
+        document.addEventListener("change", scheduleUpdate, true);
+        window.addEventListener("resize", scheduleUpdate);
+        window.addEventListener("orientationchange", scheduleUpdate);
+        if (window.MutationObserver) {
+          new MutationObserver(scheduleUpdate).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "aria-disabled", "class"] });
+        }
+      }
+      update();
+      setTimeout(update, 800);
+      setTimeout(update, 1800);
+    }
+
+    return { init: init, update: update };
+  })();
+
 
   // Resin Society chat sound layer: a short, Shopify-like soft chime.
   // Browsers only allow sound after shopper interaction, so this unlocks quietly on click/touch/key.
@@ -121,6 +314,7 @@
 
   window.addEventListener("chatwoot:ready", function() {
     if (window.ResinChatLauncher) window.ResinChatLauncher.init();
+    if (window.ResinMobileAddToCart) window.ResinMobileAddToCart.init();
     var bubble = document.querySelector(".woot-widget-bubble");
     if (!bubble || !window.MutationObserver) return;
     var hadUnread = bubble.classList.contains("unread-notification");
@@ -145,7 +339,16 @@
       });
       setTimeout(function() {
         if (window.ResinChatLauncher) window.ResinChatLauncher.init();
+        if (window.ResinMobileAddToCart) window.ResinMobileAddToCart.init();
       }, 1500);
     };
   })(document, "script");
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function() {
+      if (window.ResinMobileAddToCart) window.ResinMobileAddToCart.init();
+    });
+  } else if (window.ResinMobileAddToCart) {
+    window.ResinMobileAddToCart.init();
+  }
 </script>
