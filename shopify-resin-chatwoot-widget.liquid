@@ -227,6 +227,21 @@
       }) || null;
     }
 
+    function selectedVariantId(form) {
+      var scopes = [];
+      if (form) scopes.push(form);
+      scopes.push(document);
+      for (var i = 0; i < scopes.length; i += 1) {
+        var node = scopes[i].querySelector('input[name="id"]:checked, select[name="id"], input[name="id"], [name="id"]');
+        var value = node && node.value;
+        if (value && /^\d+$/.test(String(value))) return String(value);
+      }
+      var meta = window.ShopifyAnalytics && window.ShopifyAnalytics.meta && window.ShopifyAnalytics.meta.product;
+      if (meta && meta.selectedVariantId) return String(meta.selectedVariantId);
+      if (meta && meta.variants && meta.variants[0] && meta.variants[0].id) return String(meta.variants[0].id);
+      return "";
+    }
+
     function isUsableButton(node) {
       if (!node) return false;
       var rect = node.getBoundingClientRect();
@@ -246,7 +261,10 @@
         }
       }
       candidates = candidates.concat(Array.prototype.slice.call(document.querySelectorAll('button[name="add"], button[data-add-to-cart], .product-form__submit')));
-      return candidates.find(isUsableButton) || candidates[0] || null;
+      var nonSticky = candidates.filter(function(node) {
+        return !node.closest(".product-sticky-form, product-sticky-form");
+      });
+      return nonSticky.find(isUsableButton) || nonSticky[0] || candidates.find(isUsableButton) || candidates[0] || null;
     }
 
     function cleanText(text) {
@@ -321,10 +339,11 @@
       hideOldStickyBars();
       var form = productForm();
       var nativeButton = submitButton(form);
-      var shouldShow = isMobile() && isProductPage() && form && nativeButton;
+      var variantId = selectedVariantId(form);
+      var shouldShow = isMobile() && isProductPage() && (form || nativeButton || variantId);
       button.classList.toggle("is-visible", !!shouldShow);
       if (!shouldShow) return;
-      var disabled = nativeButton.disabled || nativeButton.getAttribute("aria-disabled") === "true";
+      var disabled = nativeButton ? nativeButton.disabled || nativeButton.getAttribute("aria-disabled") === "true" : !variantId;
       if (button.disabled !== !!disabled) button.disabled = !!disabled;
       setButtonText(adding ? "adding" : "add");
     }
@@ -341,16 +360,52 @@
     function clickNativeAdd() {
       var form = productForm();
       var nativeButton = submitButton(form);
-      if (!form || !nativeButton || nativeButton.disabled || adding) return;
+      var variantId = selectedVariantId(form);
+      if (adding || (!form && !nativeButton && !variantId)) return;
+      if (nativeButton && (nativeButton.disabled || nativeButton.getAttribute("aria-disabled") === "true")) return;
       adding = true;
       setButtonText("adding");
       playRewardSound();
-      nativeButton.click();
-      setTimeout(function() {
-        adding = false;
+      if (nativeButton) {
+        nativeButton.click();
+        setTimeout(function() {
+          adding = false;
+          setButtonText("added");
+          setTimeout(update, 1200);
+        }, 900);
+        return;
+      }
+      addVariantDirectly(form, variantId).then(function() {
         setButtonText("added");
+        announceCartChanged();
+      }).catch(function() {
+        setButtonText("Add Bag");
+      }).finally(function() {
+        adding = false;
         setTimeout(update, 1200);
-      }, 900);
+      });
+    }
+
+    function addVariantDirectly(form, variantId) {
+      var data = form ? new FormData(form) : new FormData();
+      if (!data.get("id") && variantId) data.append("id", variantId);
+      if (!data.get("quantity")) data.append("quantity", "1");
+      return fetch((window.Shopify && window.Shopify.routes ? window.Shopify.routes.root : "/") + "cart/add.js", {
+        method: "POST",
+        headers: { "Accept": "application/json" },
+        credentials: "same-origin",
+        body: data
+      }).then(function(response) {
+        if (!response.ok) throw new Error("Cart add failed");
+        return response.json();
+      });
+    }
+
+    function announceCartChanged() {
+      ["cart:refresh", "cart:change", "cart:updated"].forEach(function(eventName) {
+        document.dispatchEvent(new CustomEvent(eventName, { bubbles: true }));
+        window.dispatchEvent(new CustomEvent(eventName));
+      });
     }
 
     function init() {
