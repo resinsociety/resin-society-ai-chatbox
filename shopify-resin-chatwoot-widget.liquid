@@ -9,27 +9,35 @@
       pointer-events: none !important;
     }
 
-    body.resin-mobile-overlay-open .resin-mobile-atc,
-    body.resin-mobile-overlay-open [data-resin-section-mobile-atc],
-    body.resin-mobile-overlay-open .woot-widget-bubble,
-    body.resin-mobile-overlay-open .woot-widget-holder,
-    body.resin-mobile-overlay-open iframe[src*="chatwoot"],
-    body.resin-mobile-overlay-open #Avada-Joy_FloatingButton,
-    body.resin-mobile-overlay-open [id*="FloatingButton"][id*="Joy"],
-    body.resin-mobile-overlay-open [id*="FloatingButton"][id*="Reward"],
-    body.resin-rewards-panel-open .resin-mobile-atc,
-    body.resin-rewards-panel-open [data-resin-section-mobile-atc],
-    body.resin-rewards-panel-open .woot-widget-bubble,
-    body.resin-rewards-panel-open .woot-widget-holder,
-    body.resin-rewards-panel-open iframe[src*="chatwoot"],
-    body.resin-chat-panel-open .resin-mobile-atc,
-    body.resin-chat-panel-open [data-resin-section-mobile-atc],
-    body.resin-chat-panel-open #Avada-Joy_FloatingButton,
-    body.resin-chat-panel-open [id*="FloatingButton"][id*="Joy"],
-    body.resin-chat-panel-open [id*="FloatingButton"][id*="Reward"] {
+    html body.resin-mobile-overlay-open .resin-mobile-atc,
+    html body.resin-mobile-overlay-open [data-resin-section-mobile-atc],
+    html body.resin-mobile-overlay-open .woot-widget-bubble,
+    html body.resin-mobile-overlay-open .woot-widget-bubble.woot-elements--right,
+    html body.resin-mobile-overlay-open .woot-widget-holder,
+    html body.resin-mobile-overlay-open iframe[src*="chatwoot"],
+    html body.resin-rewards-panel-open .resin-mobile-atc,
+    html body.resin-rewards-panel-open [data-resin-section-mobile-atc],
+    html body.resin-rewards-panel-open .woot-widget-bubble,
+    html body.resin-rewards-panel-open .woot-widget-bubble.woot-elements--right,
+    html body.resin-rewards-panel-open .woot-widget-holder,
+    html body.resin-rewards-panel-open iframe[src*="chatwoot"],
+    html body.resin-chat-panel-open .resin-mobile-atc,
+    html body.resin-chat-panel-open [data-resin-section-mobile-atc] {
       display: none !important;
       visibility: hidden !important;
       pointer-events: none !important;
+    }
+
+    .resin-mobile-atc,
+    [data-resin-section-mobile-atc],
+    html body .woot-widget-bubble,
+    html body .woot-widget-bubble.woot-elements--right {
+      z-index: 1150 !important;
+    }
+
+    .woot-widget-holder,
+    iframe[src*="chatwoot"] {
+      z-index: 2147483000 !important;
     }
   }
 </style>
@@ -42,13 +50,15 @@
 
   window.ResinChatLauncher = (function() {
     var styleId = "resin-chat-launcher-style";
+    var observerInstalled = false;
+    var layerScheduled = false;
 
     function ensureStyles() {
       if (document.getElementById(styleId)) return;
       var style = document.createElement("style");
       style.id = styleId;
       style.textContent = [
-        ".woot-widget-bubble {",
+        "html body .woot-widget-bubble, html body .woot-widget-bubble.woot-elements--right {",
         "  width: auto !important;",
         "  min-width: 76px !important;",
         "  height: 44px !important;",
@@ -57,10 +67,13 @@
         "  background: #111 !important;",
         "  color: #fff !important;",
         "  box-shadow: 0 8px 24px rgba(0,0,0,.22) !important;",
+        "  z-index: 1150 !important;",
         "  display: flex !important;",
         "  align-items: center !important;",
         "  justify-content: center !important;",
         "}",
+        "html body .woot-widget-bubble, html body .woot-widget-bubble.woot-elements--right { z-index: 1150 !important; }",
+        ".woot-widget-holder, iframe[src*='chatwoot'] { z-index: 2147483000 !important; }",
         ".woot-widget-bubble svg, .woot-widget-bubble img { display: none !important; }",
         ".woot-widget-bubble::after {",
         "  content: 'Chat';",
@@ -80,23 +93,19 @@
         ".woot-widget-bubble.woot--close svg { display: block !important; }",
         "@media (max-width: 767px) {",
         "  .woot-widget-bubble { min-width: 72px !important; height: 42px !important; padding: 0 16px !important; }",
-        "  body.resin-mobile-overlay-open [data-resin-section-mobile-atc],",
-        "  body.resin-mobile-overlay-open .woot-widget-bubble,",
-        "  body.resin-mobile-overlay-open .woot-widget-holder,",
-        "  body.resin-mobile-overlay-open iframe[src*='chatwoot'],",
-        "  body.resin-mobile-overlay-open #Avada-Joy_FloatingButton,",
-        "  body.resin-mobile-overlay-open [id*='FloatingButton'][id*='Joy'],",
-        "  body.resin-mobile-overlay-open [id*='FloatingButton'][id*='Reward'],",
-        "  body.resin-rewards-panel-open .resin-mobile-atc,",
-        "  body.resin-rewards-panel-open [data-resin-section-mobile-atc],",
-        "  body.resin-rewards-panel-open .woot-widget-bubble,",
-        "  body.resin-rewards-panel-open .woot-widget-holder,",
-        "  body.resin-rewards-panel-open iframe[src*='chatwoot'],",
-        "  body.resin-chat-panel-open .resin-mobile-atc,",
-        "  body.resin-chat-panel-open [data-resin-section-mobile-atc],",
-        "  body.resin-chat-panel-open #Avada-Joy_FloatingButton,",
-        "  body.resin-chat-panel-open [id*='FloatingButton'][id*='Joy'],",
-        "  body.resin-chat-panel-open [id*='FloatingButton'][id*='Reward'] { display: none !important; visibility: hidden !important; pointer-events: none !important; }",
+        "  html body.resin-mobile-overlay-open [data-resin-section-mobile-atc],",
+        "  html body.resin-mobile-overlay-open .woot-widget-bubble,",
+        "  html body.resin-mobile-overlay-open .woot-widget-bubble.woot-elements--right,",
+        "  html body.resin-mobile-overlay-open .woot-widget-holder,",
+        "  html body.resin-mobile-overlay-open iframe[src*='chatwoot'],",
+        "  html body.resin-rewards-panel-open .resin-mobile-atc,",
+        "  html body.resin-rewards-panel-open [data-resin-section-mobile-atc],",
+        "  html body.resin-rewards-panel-open .woot-widget-bubble,",
+        "  html body.resin-rewards-panel-open .woot-widget-bubble.woot-elements--right,",
+        "  html body.resin-rewards-panel-open .woot-widget-holder,",
+        "  html body.resin-rewards-panel-open iframe[src*='chatwoot'],",
+        "  html body.resin-chat-panel-open .resin-mobile-atc,",
+        "  html body.resin-chat-panel-open [data-resin-section-mobile-atc] { display: none !important; visibility: hidden !important; pointer-events: none !important; }",
         "}"
       ].join("\n");
       document.head.appendChild(style);
@@ -104,6 +113,42 @@
 
     function init() {
       ensureStyles();
+      tuneLayers();
+      installObserver();
+    }
+
+    function tuneLayers() {
+      Array.prototype.slice.call(document.querySelectorAll(".woot-widget-bubble")).forEach(function(node) {
+        setImportant(node, "z-index", "1150");
+      });
+      Array.prototype.slice.call(document.querySelectorAll(".woot-widget-holder, iframe[src*='chatwoot']")).forEach(function(node) {
+        setImportant(node, "z-index", "2147483000");
+      });
+    }
+
+    function setImportant(node, property, value) {
+      if (node.style.getPropertyValue(property) === value && node.style.getPropertyPriority(property) === "important") return;
+      node.style.setProperty(property, value, "important");
+    }
+
+    function scheduleTuneLayers() {
+      if (layerScheduled) return;
+      layerScheduled = true;
+      window.requestAnimationFrame(function() {
+        layerScheduled = false;
+        tuneLayers();
+      });
+    }
+
+    function installObserver() {
+      if (observerInstalled || !window.MutationObserver || !document.body) return;
+      observerInstalled = true;
+      new MutationObserver(scheduleTuneLayers).observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class", "style"]
+      });
     }
 
     return { init: init };
@@ -135,7 +180,7 @@
         "  left: calc(50% + 15px);",
         "  bottom: max(22px, calc(env(safe-area-inset-bottom) + 12px));",
         "  transform: translateX(-50%);",
-        "  z-index: 2147483646;",
+        "  z-index: 1150;",
         "  width: clamp(108px, 29vw, 126px);",
         "  min-height: 46px;",
         "  border: 0;",
