@@ -28,6 +28,14 @@
       pointer-events: none !important;
     }
 
+    html body.resin-cart-drawer-open #Avada-Joy_FloatingButton,
+    html body.resin-cart-drawer-open [id*="FloatingButton"][id*="Joy"],
+    html body.resin-cart-drawer-open [id*="FloatingButton"][id*="Reward"] {
+      display: none !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+
     .resin-mobile-atc,
     [data-resin-section-mobile-atc],
     html body .woot-widget-bubble,
@@ -106,6 +114,9 @@
         "  html body.resin-rewards-panel-open iframe[src*='chatwoot'],",
         "  html body.resin-chat-panel-open .resin-mobile-atc,",
         "  html body.resin-chat-panel-open [data-resin-section-mobile-atc] { display: none !important; visibility: hidden !important; pointer-events: none !important; }",
+        "  html body.resin-cart-drawer-open #Avada-Joy_FloatingButton,",
+        "  html body.resin-cart-drawer-open [id*='FloatingButton'][id*='Joy'],",
+        "  html body.resin-cart-drawer-open [id*='FloatingButton'][id*='Reward'] { display: none !important; visibility: hidden !important; pointer-events: none !important; }",
         "}"
       ].join("\n");
       document.head.appendChild(style);
@@ -591,14 +602,17 @@
       ].join(",")));
       var rewardsOpen = nodes.some(looksLikeRewardsPanel);
       var drawerOpen = nodes.some(looksLikeCartOrDrawer);
+      var cartDrawerOpen = drawerOpen && !rewardsOpen;
       document.body.classList.toggle("resin-rewards-panel-open", rewardsOpen);
-      document.body.classList.toggle("resin-mobile-overlay-open", rewardsOpen || drawerOpen);
+      document.body.classList.toggle("resin-cart-drawer-open", cartDrawerOpen);
+      document.body.classList.toggle("resin-mobile-overlay-open", rewardsOpen || cartDrawerOpen);
     }
 
     function clearOverlayClasses() {
       if (!document.body) return;
       document.body.classList.remove("resin-mobile-overlay-open");
       document.body.classList.remove("resin-rewards-panel-open");
+      document.body.classList.remove("resin-cart-drawer-open");
     }
 
     function clickedJoyClose(event) {
