@@ -401,7 +401,7 @@
     function setButtonText(state) {
       if (!button) return;
       var price = productPrice();
-      var label = state === "added" ? "Added" : state === "adding" ? "Adding" : "Add Bag";
+      var label = state === "added" ? "Added" : state === "adding" ? "Adding" : "Bag It";
       var icon = '<svg class="resin-mobile-atc__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6.25 8.5h11.5l-.78 10.03A2.2 2.2 0 0 1 14.78 20.5H9.22a2.2 2.2 0 0 1-2.19-1.97L6.25 8.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 8.5V7a3 3 0 0 1 6 0v1.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
       var html = icon + '<span class="resin-mobile-atc__label">' + label + '</span>' + (price ? '<span class="resin-mobile-atc__price">' + price + '</span>' : "");
       if (html !== lastHtml) {
@@ -456,7 +456,7 @@
         setButtonText("added");
         announceCartChanged();
       }).catch(function() {
-        setButtonText("Add Bag");
+        setButtonText("add");
       }).finally(function() {
         adding = false;
         setTimeout(update, 1200);
