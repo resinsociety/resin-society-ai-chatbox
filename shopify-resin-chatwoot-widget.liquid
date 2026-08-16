@@ -545,8 +545,13 @@
       if (!isVisiblePanel(node) || !largeEnoughForOverlay(node, 0.42)) return false;
       var identity = nodeIdentity(node);
       var text = panelText(node);
-      return /joy|loyalty|avada/.test(identity) ||
-        /society points|daily visit reward|my coupons|refer a friend|view profile/.test(text);
+      if (/^joy-(loyalty|rewards)-widget$/i.test(String(node.tagName || ""))) {
+        return node.hasAttribute("open");
+      }
+      if (/joy|loyalty|avada/.test(identity)) {
+        return /society points|daily visit reward|my coupons|refer a friend|view profile/.test(text);
+      }
+      return /society points|daily visit reward|my coupons|refer a friend|view profile/.test(text);
     }
 
     function looksLikeCartOrDrawer(node) {
@@ -564,8 +569,7 @@
     function update() {
       if (!document.body) return;
       if (!isMobile()) {
-        document.body.classList.remove("resin-mobile-overlay-open");
-        document.body.classList.remove("resin-rewards-panel-open");
+        clearOverlayClasses();
         return;
       }
 
@@ -591,6 +595,22 @@
       document.body.classList.toggle("resin-mobile-overlay-open", rewardsOpen || drawerOpen);
     }
 
+    function clearOverlayClasses() {
+      if (!document.body) return;
+      document.body.classList.remove("resin-mobile-overlay-open");
+      document.body.classList.remove("resin-rewards-panel-open");
+    }
+
+    function clickedJoyClose(event) {
+      var path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      return path.some(function(node) {
+        if (!node || node === window || !node.getAttribute) return false;
+        var classText = String(node.className || "").toLowerCase();
+        var labelText = String(node.getAttribute("aria-label") || node.getAttribute("title") || "").toLowerCase();
+        return classText.indexOf("joy-close-btn") !== -1 || labelText === "close";
+      });
+    }
+
     function scheduleUpdate() {
       if (scheduled) return;
       scheduled = true;
@@ -602,7 +622,14 @@
 
     function init() {
       update();
-      document.addEventListener("click", function() { setTimeout(scheduleUpdate, 120); }, true);
+      document.addEventListener("click", function(event) {
+        if (clickedJoyClose(event)) {
+          setTimeout(clearOverlayClasses, 250);
+          setTimeout(scheduleUpdate, 450);
+          return;
+        }
+        setTimeout(scheduleUpdate, 120);
+      }, true);
       document.addEventListener("keyup", scheduleUpdate, true);
       window.addEventListener("resize", scheduleUpdate);
       window.addEventListener("orientationchange", scheduleUpdate);
