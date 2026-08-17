@@ -1,5 +1,21 @@
 <!-- Resin Society Chatwoot Website Chat -->
 <style id="resin-mobile-widget-layer-overrides">
+  body.template-index #CartDrawer,
+  body.template-index cart-drawer#CartDrawer,
+  body.template-index .cart-drawer[aria-modal="true"],
+  body.template-index overlay-element[aria-controls="CartDrawer"],
+  body:has(.resin-home) #CartDrawer,
+  body:has(.resin-home) cart-drawer#CartDrawer,
+  body:has(.resin-home) .cart-drawer[aria-modal="true"],
+  body:has(.resin-home) overlay-element[aria-controls="CartDrawer"] {
+    z-index: 2147483300 !important;
+  }
+
+  body.template-index #CartDrawer .drawer__inner,
+  body:has(.resin-home) #CartDrawer .drawer__inner {
+    z-index: 2147483301 !important;
+  }
+
   @media (max-width: 767px) {
     body.template-product product-sticky-form.product-sticky-form,
     body.template-product .product-sticky-form,
